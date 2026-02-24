@@ -16,9 +16,11 @@ from app.db import DEFAULT_DB_PATH, get_connection, init_db
 from app.meanings import MeaningGenerationError, MeaningGenerator, normalize_english_meaning_text
 from app.models import (
     HealthResponse,
+    MeaningCreateRequest,
     MeaningGenerateRequest,
     MeaningsListResponse,
     MeaningResponse,
+    MeaningUpdateRequest,
     SentenceResponse,
     SentenceTokenResponse,
     TextCreateRequest,
@@ -29,6 +31,8 @@ from app.models import (
     UserCreateRequest,
     UserResponse,
     UsersListResponse,
+    WordDetailsResponse,
+    WordDetailsUpdateRequest,
     WordListFilter,
     WordStateResponse,
     WordStateUpdateRequest,
@@ -161,6 +165,31 @@ def row_to_meaning(row: Any) -> MeaningResponse:
         source_sentence=row["source_sentence"],
         created_at=row["created_at"],
     )
+
+
+def row_to_word_details(row: Any, user_id: str, normalized_word: str) -> WordDetailsResponse:
+    if not row:
+        return WordDetailsResponse(
+            user_id=user_id,
+            normalized_word=normalized_word,
+            mnemonic=None,
+            created_at=None,
+            updated_at=None,
+        )
+    return WordDetailsResponse(
+        user_id=row["user_id"],
+        normalized_word=row["normalized_word"],
+        mnemonic=row["mnemonic"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def normalize_meaning_text(value: str) -> str:
+    normalized = " ".join(value.strip().split())
+    if not normalized:
+        raise HTTPException(status_code=400, detail="invalid_meaning_text")
+    return normalized
 
 
 def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | None = None) -> FastAPI:
@@ -533,6 +562,34 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         ).fetchall()
         return MeaningsListResponse(items=[row_to_meaning(row) for row in rows])
 
+    @app.post("/v1/users/{user_id}/words/{normalized_word}/meanings", response_model=MeaningResponse)
+    def create_meaning(
+        user_id: str,
+        normalized_word: str,
+        payload: MeaningCreateRequest,
+        conn: Any = Depends(get_conn),
+    ) -> MeaningResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        normalized = normalize_token(normalized_word)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        meaning_id = str(uuid4())
+        now = utc_now_iso()
+        meaning_text = normalize_meaning_text(payload.meaning_text)
+        source_sentence = payload.source_sentence.strip() if payload.source_sentence else None
+        conn.execute(
+            """
+            INSERT INTO meanings (meaning_id, user_id, normalized_word, meaning_text, source_sentence, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (meaning_id, user_id, normalized, meaning_text, source_sentence, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM meanings WHERE meaning_id = ?", (meaning_id,)).fetchone()
+        return row_to_meaning(row)
+
     @app.post("/v1/users/{user_id}/words/{normalized_word}/meanings/generate", response_model=MeaningResponse)
     def generate_meaning(
         user_id: str,
@@ -568,6 +625,32 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         row = conn.execute("SELECT * FROM meanings WHERE meaning_id = ?", (meaning_id,)).fetchone()
         return row_to_meaning(row)
 
+    @app.put("/v1/users/{user_id}/words/{normalized_word}/meanings/{meaning_id}", response_model=MeaningResponse)
+    def update_meaning(
+        user_id: str,
+        normalized_word: str,
+        meaning_id: str,
+        payload: MeaningUpdateRequest,
+        conn: Any = Depends(get_conn),
+    ) -> MeaningResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        meaning_id = ensure_uuid(meaning_id, "meaning_id")
+        ensure_active_user(conn, user_id)
+        normalized = normalize_token(normalized_word)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        meaning_text = normalize_meaning_text(payload.meaning_text)
+        cursor = conn.execute(
+            "UPDATE meanings SET meaning_text = ? WHERE meaning_id = ? AND user_id = ? AND normalized_word = ?",
+            (meaning_text, meaning_id, user_id, normalized),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="meaning_not_found")
+        row = conn.execute("SELECT * FROM meanings WHERE meaning_id = ?", (meaning_id,)).fetchone()
+        return row_to_meaning(row)
+
     @app.delete("/v1/users/{user_id}/words/{normalized_word}/meanings/{meaning_id}")
     def delete_meaning(user_id: str, normalized_word: str, meaning_id: str, conn: Any = Depends(get_conn)) -> dict[str, str]:
         user_id = ensure_uuid(user_id, "user_id")
@@ -584,6 +667,59 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="meaning_not_found")
         return {"status": "deleted"}
+
+    @app.get("/v1/users/{user_id}/words/{normalized_word}/details", response_model=WordDetailsResponse)
+    def get_word_details(user_id: str, normalized_word: str, conn: Any = Depends(get_conn)) -> WordDetailsResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        normalized = normalize_token(normalized_word)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        row = conn.execute(
+            """
+            SELECT user_id, normalized_word, mnemonic, created_at, updated_at
+            FROM word_details
+            WHERE user_id = ? AND normalized_word = ?
+            """,
+            (user_id, normalized),
+        ).fetchone()
+        return row_to_word_details(row, user_id, normalized)
+
+    @app.put("/v1/users/{user_id}/words/{normalized_word}/details", response_model=WordDetailsResponse)
+    def update_word_details(
+        user_id: str,
+        normalized_word: str,
+        payload: WordDetailsUpdateRequest,
+        conn: Any = Depends(get_conn),
+    ) -> WordDetailsResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        normalized = normalize_token(normalized_word)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        mnemonic = (payload.mnemonic or "").strip() or None
+        now = utc_now_iso()
+        conn.execute(
+            """
+            INSERT INTO word_details (user_id, normalized_word, mnemonic, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, normalized_word)
+            DO UPDATE SET mnemonic = excluded.mnemonic, updated_at = excluded.updated_at
+            """,
+            (user_id, normalized, mnemonic, now, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT user_id, normalized_word, mnemonic, created_at, updated_at
+            FROM word_details
+            WHERE user_id = ? AND normalized_word = ?
+            """,
+            (user_id, normalized),
+        ).fetchone()
+        return row_to_word_details(row, user_id, normalized)
 
     return app
 

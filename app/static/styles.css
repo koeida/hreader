@@ -397,6 +397,10 @@ textarea:focus-visible {
   margin-bottom: 0.18rem;
 }
 
+.meaning-editor {
+  min-height: 72px;
+}
+
 #meanings-list li.is-removing {
   opacity: 0.55;
   transform: translateX(6px);

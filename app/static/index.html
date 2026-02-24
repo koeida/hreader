@@ -125,6 +125,19 @@
           </div>
           <div id="word-details-state" class="state" role="status" aria-live="polite"></div>
 
+          <form id="mnemonic-form" class="stack-form">
+            <label for="word-mnemonic">Mnemonic</label>
+            <textarea id="word-mnemonic" placeholder="Add a memory hook for this word"></textarea>
+            <button type="submit">Save Mnemonic</button>
+          </form>
+          <div id="mnemonic-state" class="state" role="status" aria-live="polite"></div>
+
+          <form id="add-meaning-form" class="stack-form">
+            <label for="manual-meaning">Meaning (editable)</label>
+            <textarea id="manual-meaning" placeholder="Add your own meaning"></textarea>
+            <button type="submit">Add Meaning</button>
+          </form>
+
           <form id="generate-meaning-form" class="stack-form">
             <textarea id="meaning-context" placeholder="Optional sentence context"></textarea>
             <button type="submit">Generate English Meaning</button>

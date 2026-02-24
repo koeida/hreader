@@ -104,8 +104,29 @@ class MeaningsListResponse(BaseModel):
     items: list[MeaningResponse]
 
 
+class MeaningCreateRequest(BaseModel):
+    meaning_text: str = Field(min_length=1, max_length=500)
+    source_sentence: str | None = Field(default=None, max_length=1000)
+
+
+class MeaningUpdateRequest(BaseModel):
+    meaning_text: str = Field(min_length=1, max_length=500)
+
+
 class MeaningGenerateRequest(BaseModel):
     sentence_context: str | None = None
+
+
+class WordDetailsResponse(BaseModel):
+    user_id: str
+    normalized_word: str
+    mnemonic: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class WordDetailsUpdateRequest(BaseModel):
+    mnemonic: str | None = Field(default=None, max_length=500)
 
 
 class HealthResponse(BaseModel):

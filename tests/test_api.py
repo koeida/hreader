@@ -262,6 +262,48 @@ def test_meanings_generate_list_delete_and_timeout_error(tmp_path: Path) -> None
         assert timeout.json()["error"]["message"] == "meaning_generation_timeout"
 
 
+def test_word_details_mnemonic_and_manual_meaning_edit(tmp_path: Path) -> None:
+    with make_client(tmp_path, generator=CountingGenerator()) as client:
+        user_id = create_user(client)
+
+        details_before = client.get(f"/v1/users/{user_id}/words/שלום/details")
+        assert details_before.status_code == 200
+        assert details_before.json()["mnemonic"] is None
+
+        saved_details = client.put(
+            f"/v1/users/{user_id}/words/שלום/details",
+            json={"mnemonic": "Say shalom like saying hello"},
+        )
+        assert saved_details.status_code == 200
+        assert saved_details.json()["mnemonic"] == "Say shalom like saying hello"
+
+        created = client.post(
+            f"/v1/users/{user_id}/words/שלום/meanings",
+            json={"meaning_text": " greeting  "},
+        )
+        assert created.status_code == 200
+        assert created.json()["meaning_text"] == "greeting"
+        meaning_id = created.json()["meaning_id"]
+
+        updated = client.put(
+            f"/v1/users/{user_id}/words/שלום/meanings/{meaning_id}",
+            json={"meaning_text": "peace / hello"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["meaning_text"] == "peace / hello"
+
+        listed = client.get(f"/v1/users/{user_id}/words/שלום/meanings")
+        assert listed.status_code == 200
+        assert listed.json()["items"][0]["meaning_text"] == "peace / hello"
+
+        cleared_details = client.put(
+            f"/v1/users/{user_id}/words/שלום/details",
+            json={"mnemonic": ""},
+        )
+        assert cleared_details.status_code == 200
+        assert cleared_details.json()["mnemonic"] is None
+
+
 def test_meaning_generation_enforces_english_and_normalizes_whitespace(tmp_path: Path) -> None:
     with make_client(tmp_path / "english", generator=WhitespaceEnglishGenerator()) as client:
         user_id = create_user(client)

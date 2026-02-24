@@ -49,6 +49,9 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="word-details-word"' in html.text
     assert 'id="word-details-status"' in html.text
     assert 'id="word-details-state"' in html.text
+    assert 'id="mnemonic-form"' in html.text
+    assert 'id="word-mnemonic"' in html.text
+    assert 'id="add-meaning-form"' in html.text
     assert 'id="meanings-preview"' in html.text
 
     assert "onSentenceWordActivated" in js.text
@@ -71,6 +74,7 @@ def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> N
     assert '!isCurrentRequest("words", requestVersion)' in js.text
     assert '!isCurrentRequest("sentence", requestVersion)' in js.text
     assert '!isCurrentRequest("meanings", requestVersion)' in js.text
+    assert '!isCurrentRequest("wordDetails", requestVersion)' in js.text
     assert "word !== state.selectedWord" in js.text
     assert "state.selectedWord !== actionWord" in js.text
 

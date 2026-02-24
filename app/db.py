@@ -67,11 +67,23 @@ def init_db(conn: sqlite3.Connection) -> None:
             FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS word_details (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            normalized_word TEXT NOT NULL,
+            mnemonic TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            UNIQUE(user_id, normalized_word)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
         CREATE INDEX IF NOT EXISTS idx_texts_user_id ON texts(user_id);
         CREATE INDEX IF NOT EXISTS idx_sentences_text_id ON text_sentences(text_id, sentence_index);
         CREATE INDEX IF NOT EXISTS idx_words_user_state ON user_words(user_id, state, normalized_word);
         CREATE INDEX IF NOT EXISTS idx_meanings_user_word ON meanings(user_id, normalized_word, created_at);
+        CREATE INDEX IF NOT EXISTS idx_word_details_user_word ON word_details(user_id, normalized_word);
         """
     )
     conn.commit()

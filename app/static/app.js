@@ -95,6 +95,13 @@ class ApiClient {
     });
   }
 
+  createMeaning(userId, normalizedWord, meaningText) {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings`, {
+      method: "POST",
+      body: JSON.stringify({ meaning_text: meaningText }),
+    });
+  }
+
   generateMeaning(userId, normalizedWord, sentenceContext) {
     return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/generate`, {
       method: "POST",
@@ -102,9 +109,29 @@ class ApiClient {
     });
   }
 
+  updateMeaning(userId, normalizedWord, meaningId, meaningText) {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/${meaningId}`, {
+      method: "PUT",
+      body: JSON.stringify({ meaning_text: meaningText }),
+    });
+  }
+
   deleteMeaning(userId, normalizedWord, meaningId) {
     return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/${meaningId}`, {
       method: "DELETE",
+    });
+  }
+
+  getWordDetails(userId, normalizedWord) {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details`, {
+      method: "GET",
+    });
+  }
+
+  updateWordDetails(userId, normalizedWord, mnemonic) {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details`, {
+      method: "PUT",
+      body: JSON.stringify({ mnemonic }),
     });
   }
 }
@@ -129,6 +156,7 @@ const state = {
     sentence: 0,
     words: 0,
     meanings: 0,
+    wordDetails: 0,
     wordSave: 0,
   },
 };
@@ -157,6 +185,11 @@ const el = {
   wordDetailsWord: document.getElementById("word-details-word"),
   wordDetailsStatus: document.getElementById("word-details-status"),
   wordDetailsState: document.getElementById("word-details-state"),
+  mnemonicForm: document.getElementById("mnemonic-form"),
+  wordMnemonic: document.getElementById("word-mnemonic"),
+  mnemonicState: document.getElementById("mnemonic-state"),
+  addMeaningForm: document.getElementById("add-meaning-form"),
+  manualMeaning: document.getElementById("manual-meaning"),
   generateMeaningForm: document.getElementById("generate-meaning-form"),
   meaningContext: document.getElementById("meaning-context"),
   meaningsState: document.getElementById("meanings-state"),
@@ -236,7 +269,10 @@ function clearWordDetailsPanel() {
   el.wordDetailsWord.textContent = "No word selected";
   el.wordDetailsStatus.textContent = "Unseen";
   setStateMessage(el.wordDetailsState, "");
+  setStateMessage(el.mnemonicState, "");
   setStateMessage(el.meaningsState, "");
+  el.wordMnemonic.value = "";
+  el.manualMeaning.value = "";
   el.meaningsPreview.innerHTML = "";
   el.meaningsList.innerHTML = "";
 }
@@ -773,7 +809,7 @@ async function loadWords() {
 
 function renderMeanings(data) {
   const items = data.items || [];
-  const newest = items[0] || null;
+  const newest = items[items.length - 1] || null;
 
   if (newest) {
     el.meaningsPreview.innerHTML = `
@@ -789,16 +825,60 @@ function renderMeanings(data) {
   el.meaningsList.innerHTML = "";
   for (const item of items) {
     const li = document.createElement("li");
-    li.innerHTML = `<div>${item.meaning_text}</div><small>${item.created_at}</small>`;
+    const editor = document.createElement("textarea");
+    editor.value = item.meaning_text;
+    editor.className = "meaning-editor";
+    editor.setAttribute("aria-label", "Meaning text");
+    li.appendChild(editor);
+
+    const meta = document.createElement("small");
+    meta.textContent = item.created_at;
+    li.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "row-form";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = "Save";
+    save.onclick = () => updateMeaning(item.meaning_id, editor, save);
+    actions.appendChild(save);
+
     const del = document.createElement("button");
     del.type = "button";
     del.textContent = "Delete";
     del.onclick = () => deleteMeaning(item.meaning_id, li);
-    li.appendChild(del);
+    actions.appendChild(del);
+    li.appendChild(actions);
     el.meaningsList.appendChild(li);
   }
 
   setStateMessage(el.meaningsState, "");
+}
+
+function renderWordDetails(data) {
+  el.wordMnemonic.value = data?.mnemonic || "";
+  setStateMessage(el.mnemonicState, "");
+}
+
+async function loadWordDetailsForWord(word) {
+  const requestVersion = nextRequestVersion("wordDetails");
+  if (!state.activeUserId || !word) {
+    el.wordMnemonic.value = "";
+    return;
+  }
+  setStateMessage(el.mnemonicState, "Loading...");
+  try {
+    const data = await state.api.getWordDetails(state.activeUserId, word);
+    if (!isCurrentRequest("wordDetails", requestVersion) || word !== state.selectedWord) {
+      return;
+    }
+    renderWordDetails(data);
+  } catch (err) {
+    if (!isCurrentRequest("wordDetails", requestVersion) || word !== state.selectedWord) {
+      return;
+    }
+    setStateMessage(el.mnemonicState, String(err.message || err), true);
+  }
 }
 
 async function loadMeaningsForWord(word) {
@@ -827,8 +907,42 @@ async function loadMeaningsForWord(word) {
 function setSelectedWord(word) {
   state.selectedWord = word;
   setStateMessage(el.wordDetailsState, "");
+  setStateMessage(el.mnemonicState, "");
   renderSentence();
+  void loadWordDetailsForWord(word);
   void loadMeaningsForWord(word);
+}
+
+async function updateMeaning(meaningId, editorNode, saveButton) {
+  const actionWord = state.selectedWord;
+  if (!actionWord) {
+    return;
+  }
+  const newText = editorNode.value.trim();
+  if (!newText) {
+    setStateMessage(el.meaningsState, "Meaning cannot be empty", true);
+    return;
+  }
+  const originalButtonText = saveButton.textContent;
+  try {
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+    setStateMessage(el.meaningsState, "Saving...");
+    await state.api.updateMeaning(state.activeUserId, actionWord, meaningId, newText);
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, "");
+    await loadMeaningsForWord(actionWord);
+  } catch (err) {
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, `Save failed: ${String(err.message || err)}`, true);
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = originalButtonText || "Save";
+  }
 }
 
 async function onSentenceWordActivated(word) {
@@ -1008,6 +1122,81 @@ el.nextSentence.onclick = async () => {
   clearWordDetailsPanel();
   state.sentenceIndex = Number(el.nextSentence.dataset.target);
   await loadSentence();
+};
+
+el.mnemonicForm.onsubmit = async (event) => {
+  event.preventDefault();
+  const actionWord = state.selectedWord;
+  if (!actionWord) {
+    setStateMessage(el.mnemonicState, "Pick a word in reader first", true);
+    return;
+  }
+  const submitButton = el.mnemonicForm.querySelector("button[type='submit']");
+  const originalSubmitText = submitButton ? submitButton.textContent : "";
+  try {
+    requireUser();
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Saving...";
+    }
+    setStateMessage(el.mnemonicState, "Saving...");
+    await state.api.updateWordDetails(state.activeUserId, actionWord, el.wordMnemonic.value.trim() || null);
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.mnemonicState, "Saved");
+  } catch (err) {
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.mnemonicState, `Save failed: ${String(err.message || err)}`, true);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalSubmitText || "Save Mnemonic";
+    }
+  }
+};
+
+el.addMeaningForm.onsubmit = async (event) => {
+  event.preventDefault();
+  const actionWord = state.selectedWord;
+  const meaningText = el.manualMeaning.value.trim();
+  if (!actionWord) {
+    setStateMessage(el.meaningsState, "Pick a word in reader first", true);
+    return;
+  }
+  if (!meaningText) {
+    setStateMessage(el.meaningsState, "Meaning cannot be empty", true);
+    return;
+  }
+  const submitButton = el.addMeaningForm.querySelector("button[type='submit']");
+  const originalSubmitText = submitButton ? submitButton.textContent : "";
+  try {
+    requireUser();
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Adding...";
+    }
+    setStateMessage(el.meaningsState, "Saving...");
+    await state.api.createMeaning(state.activeUserId, actionWord, meaningText);
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    el.manualMeaning.value = "";
+    setStateMessage(el.meaningsState, "");
+    await loadMeaningsForWord(actionWord);
+  } catch (err) {
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, `Save failed: ${String(err.message || err)}`, true);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalSubmitText || "Add Meaning";
+    }
+  }
 };
 
 el.generateMeaningForm.onsubmit = async (event) => {
