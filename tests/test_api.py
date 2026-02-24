@@ -14,7 +14,17 @@ class CountingGenerator:
 
     def generate(self, normalized_word: str, sentence_context: str | None) -> str:
         self.calls += 1
-        return f"פירוש-{normalized_word}-{self.calls}"
+        return f"Meaning gloss {self.calls}"
+
+
+class WhitespaceEnglishGenerator:
+    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+        return "  basic   meaning\n"
+
+
+class HebrewOutputGenerator:
+    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+        return f"פירוש עבור {normalized_word}"
 
 
 class TimeoutGenerator:
@@ -250,6 +260,26 @@ def test_meanings_generate_list_delete_and_timeout_error(tmp_path: Path) -> None
         )
         assert timeout.status_code == 504
         assert timeout.json()["error"]["message"] == "meaning_generation_timeout"
+
+
+def test_meaning_generation_enforces_english_and_normalizes_whitespace(tmp_path: Path) -> None:
+    with make_client(tmp_path / "english", generator=WhitespaceEnglishGenerator()) as client:
+        user_id = create_user(client)
+        generated = client.post(
+            f"/v1/users/{user_id}/words/שלום/meanings/generate",
+            json={"sentence_context": "שלום"},
+        )
+        assert generated.status_code == 200
+        assert generated.json()["meaning_text"] == "basic meaning"
+
+    with make_client(tmp_path / "hebrew", generator=HebrewOutputGenerator()) as client:
+        user_id = create_user(client)
+        rejected = client.post(
+            f"/v1/users/{user_id}/words/שלום/meanings/generate",
+            json={"sentence_context": "שלום"},
+        )
+        assert rejected.status_code == 502
+        assert rejected.json()["error"]["message"] == "meaning_generation_non_english"
 
 
 def test_frontend_assisted_journey_rename_jump_pagination_and_state_updates(tmp_path: Path) -> None:

@@ -10,24 +10,32 @@ CHECKLIST_BASE = """# V1 Completion Checklist
 
 10. UX Hardening + Basic QA Gates: `Pending`
 Evidence complete: keyboard tab navigation, accessibility roles/labels, smoke + browser + visual QA artifacts, Playwright Chromium mobile emulation checks for iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping), and Playwright WebKit iPhone 12 emulation coverage for modal focus restoration + tab state changes.
-Remaining: manual real-device pass on iOS Safari and Android Chrome per `docs/visual-qa.md`, documented in a dated report under `docs/qa-reports/mobile-real-device-YYYYMMDD.md`.
+Remaining: desktop browser QA matrix pass on Desktop Chromium, Desktop Firefox, and Desktop WebKit per `docs/visual-qa.md`, documented in a dated report under `docs/qa-reports/desktop-browser-qa-YYYYMMDD.md`.
 
 ## Current Release Gate
 
-Final sign-off still requires the real-device mobile checklist pass.
+Final sign-off still requires the desktop browser QA checklist pass.
 """
 
 
-def _write_report(path: Path, *, ios_result: str, android_result: str, overall: str) -> None:
+def _write_report(
+    path: Path,
+    *,
+    chromium_result: str,
+    firefox_result: str,
+    webkit_result: str,
+    overall: str,
+) -> None:
     path.write_text(
-        f"""# Mobile Real-Device QA Report (2026-02-24)
+        f"""# Desktop Browser QA Report (2026-02-24)
 
-## Device Matrix
+## Browser Matrix
 
-| Device | OS version | Browser version | Result (`PASS`/`FAIL`) | Notes |
-| --- | --- | --- | --- | --- |
-| iOS Safari | 17 | Safari | {ios_result} |  |
-| Android Chrome | 14 | Chrome | {android_result} |  |
+| Browser | Version | Result (`PASS`/`FAIL`) | Notes |
+| --- | --- | --- | --- |
+| Desktop Chromium | 135 | {chromium_result} |  |
+| Desktop Firefox | 136 | {firefox_result} |  |
+| Desktop WebKit | 18 | {webkit_result} |  |
 
 ## Sign-off
 
@@ -39,9 +47,15 @@ def _write_report(path: Path, *, ios_result: str, android_result: str, overall: 
 
 def test_finalize_v1_checklist_updates_item_10_when_report_passes(tmp_path: Path) -> None:
     checklist_path = tmp_path / "v1-checklist.md"
-    report_path = tmp_path / "mobile-real-device-20260224.md"
+    report_path = tmp_path / "desktop-browser-qa-20260224.md"
     checklist_path.write_text(CHECKLIST_BASE, encoding="utf-8")
-    _write_report(report_path, ios_result="PASS", android_result="PASS", overall="PASS")
+    _write_report(
+        report_path,
+        chromium_result="PASS",
+        firefox_result="PASS",
+        webkit_result="PASS",
+        overall="PASS",
+    )
 
     result = subprocess.run(
         [
@@ -62,13 +76,20 @@ def test_finalize_v1_checklist_updates_item_10_when_report_passes(tmp_path: Path
     assert "10. UX Hardening + Basic QA Gates: `Complete`" in updated
     assert f"Real-device QA PASS report: `{report_path.as_posix()}`." in updated
     assert "Remaining: manual real-device pass" not in updated
+    assert "All V1 checklist items are complete." in updated
 
 
 def test_finalize_v1_checklist_rejects_non_pass_report(tmp_path: Path) -> None:
     checklist_path = tmp_path / "v1-checklist.md"
-    report_path = tmp_path / "mobile-real-device-20260224.md"
+    report_path = tmp_path / "desktop-browser-qa-20260224.md"
     checklist_path.write_text(CHECKLIST_BASE, encoding="utf-8")
-    _write_report(report_path, ios_result="PASS", android_result="FAIL", overall="FAIL")
+    _write_report(
+        report_path,
+        chromium_result="PASS",
+        firefox_result="FAIL",
+        webkit_result="PASS",
+        overall="FAIL",
+    )
 
     result = subprocess.run(
         [

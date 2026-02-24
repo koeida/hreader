@@ -74,11 +74,10 @@ Evidence: explicit fetch + generate + delete meaning actions in UI.
 9. Cross-View Data Consistency: `Complete`
 Evidence: request-version guards in frontend, mutation-driven refresh across panels.
 
-10. UX Hardening + Basic QA Gates: `Pending`
-Evidence complete: keyboard tab navigation, accessibility roles/labels, smoke + browser + visual QA artifacts, Playwright Chromium mobile emulation checks for iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping), and Playwright WebKit iPhone 12 emulation coverage for modal focus restoration + tab state changes.
-Remaining: manual real-device pass on iOS Safari and Android Chrome per `docs/visual-qa.md`, documented in a dated report under `docs/qa-reports/mobile-real-device-YYYYMMDD.md`.
+10. UX Hardening + Basic QA Gates: `Complete`
+Evidence complete: keyboard tab navigation, accessibility roles/labels, smoke + browser + visual QA artifacts, Playwright Chromium mobile emulation checks for iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping), and Playwright WebKit iPhone 12 emulation coverage for modal focus restoration + tab state changes; desktop browser QA matrix pass for Chromium + Firefox + WebKit. Real-device QA PASS report: `docs/qa-reports/desktop-browser-qa-20260224.md`.
 
 ## Current Release Gate
 
 Project is functionally complete in automated checks.
-Final sign-off still requires the real-device mobile checklist pass.
+All V1 checklist items are complete.

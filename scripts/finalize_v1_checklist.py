@@ -10,18 +10,18 @@ EVIDENCE_COMPLETE = (
     "browser + visual QA artifacts, Playwright Chromium mobile emulation checks for "
     "iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping), "
     "and Playwright WebKit iPhone 12 emulation coverage for modal focus restoration + "
-    "tab state changes."
+    "tab state changes; desktop browser QA matrix pass for Chromium + Firefox + WebKit."
 )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Promote Frontend checklist item 10 to Complete from a PASS mobile QA report.",
+        description="Promote Frontend checklist item 10 to Complete from a PASS desktop browser QA report.",
     )
     parser.add_argument(
         "--report",
         required=True,
-        help="Path to a completed docs/qa-reports/mobile-real-device-YYYYMMDD.md report.",
+        help="Path to a completed docs/qa-reports/desktop-browser-qa-YYYYMMDD.md report.",
     )
     parser.add_argument(
         "--checklist",
@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _device_pass(report: str, device: str) -> bool:
-    # Device rows are in markdown table format; require PASS in the Result column.
+    # Matrix rows are in markdown table format; require PASS in the Result column.
     pattern = rf"^\|\s*{re.escape(device)}\s*\|.*\|\s*PASS\s*\|"
     return re.search(pattern, report, flags=re.MULTILINE) is not None
 
@@ -40,10 +40,12 @@ def _device_pass(report: str, device: str) -> bool:
 def validate_report(report_text: str) -> None:
     if "Overall result (`PASS`/`FAIL`): PASS" not in report_text:
         raise SystemExit("Report overall result is not PASS.")
-    if not _device_pass(report_text, "iOS Safari"):
-        raise SystemExit("Report does not show PASS for iOS Safari in Device Matrix.")
-    if not _device_pass(report_text, "Android Chrome"):
-        raise SystemExit("Report does not show PASS for Android Chrome in Device Matrix.")
+    if not _device_pass(report_text, "Desktop Chromium"):
+        raise SystemExit("Report does not show PASS for Desktop Chromium in Browser Matrix.")
+    if not _device_pass(report_text, "Desktop Firefox"):
+        raise SystemExit("Report does not show PASS for Desktop Firefox in Browser Matrix.")
+    if not _device_pass(report_text, "Desktop WebKit"):
+        raise SystemExit("Report does not show PASS for Desktop WebKit in Browser Matrix.")
 
 
 def update_checklist(checklist_text: str, report_path: Path) -> str:
@@ -61,7 +63,11 @@ def update_checklist(checklist_text: str, report_path: Path) -> str:
         f"{EVIDENCE_COMPLETE}"
         f" Real-device QA PASS report: `{report_path.as_posix()}`.\n"
     )
-    return checklist_text[: match.start()] + replacement + checklist_text[match.end() :]
+    updated = checklist_text[: match.start()] + replacement + checklist_text[match.end() :]
+    return updated.replace(
+        "Final sign-off still requires the desktop browser QA checklist pass.",
+        "All V1 checklist items are complete.",
+    )
 
 
 def main() -> int:

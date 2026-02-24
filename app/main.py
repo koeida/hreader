@@ -2,16 +2,18 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.db import DEFAULT_DB_PATH, get_connection, init_db
-from app.meanings import MeaningGenerationError, MeaningGenerator
+from app.meanings import MeaningGenerationError, MeaningGenerator, normalize_english_meaning_text
 from app.models import (
     HealthResponse,
     MeaningGenerateRequest,
@@ -174,6 +176,14 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     app = FastAPI(title="Hebrew Reading Helper API", version="1.0.0", lifespan=lifespan)
     app.state.db_path = db_path
     app.state.meaning_generator = meaning_generator or MeaningGenerator()
+    app.state.static_dir = Path(__file__).resolve().parent / "static"
+
+    if app.state.static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(app.state.static_dir)), name="static")
+
+        @app.get("/", include_in_schema=False)
+        def serve_ui() -> FileResponse:
+            return FileResponse(app.state.static_dir / "index.html")
 
     def get_conn() -> Any:
         conn = get_connection(app.state.db_path)
@@ -537,7 +547,8 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             raise HTTPException(status_code=400, detail="invalid_word")
 
         try:
-            meaning_text = app.state.meaning_generator.generate(normalized, payload.sentence_context)
+            meaning_raw = app.state.meaning_generator.generate(normalized, payload.sentence_context)
+            meaning_text = normalize_english_meaning_text(meaning_raw)
         except MeaningGenerationError as exc:
             msg = str(exc)
             if msg == "meaning_generation_timeout":

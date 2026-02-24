@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import re
 import subprocess
 
 
 class MeaningGenerationError(Exception):
     pass
+
+
+HEBREW_CHARS_RE = re.compile(r"[\u0590-\u05FF]")
+ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
+
+
+def normalize_english_meaning_text(value: str) -> str:
+    normalized = " ".join(value.strip().split())
+    if not normalized:
+        raise MeaningGenerationError("meaning_generation_empty")
+    if HEBREW_CHARS_RE.search(normalized) or not ASCII_LETTER_RE.search(normalized):
+        raise MeaningGenerationError("meaning_generation_non_english")
+    return normalized
 
 
 class MeaningGenerator:
@@ -14,7 +28,7 @@ class MeaningGenerator:
 
     def generate(self, normalized_word: str, sentence_context: str | None) -> str:
         prompt = (
-            "Give one concise Hebrew meaning/gloss for the target word used in sentence context. "
+            "Give one concise English meaning/gloss for the target word used in sentence context. "
             "Return only the meaning text, no labels.\n"
             f"Target word: {normalized_word}\n"
             f"Sentence: {sentence_context or ''}\n"
@@ -35,10 +49,7 @@ class MeaningGenerator:
         if result.returncode != 0:
             raise MeaningGenerationError("meaning_generation_failed")
 
-        meaning = (result.stdout or "").strip()
-        if not meaning:
-            raise MeaningGenerationError("meaning_generation_empty")
-        return meaning
+        return normalize_english_meaning_text(result.stdout or "")
 
 
 class FakeMeaningGenerator:
@@ -48,4 +59,4 @@ class FakeMeaningGenerator:
     def generate(self, normalized_word: str, sentence_context: str | None) -> str:
         self.calls += 1
         suffix = f" ({self.calls})"
-        return f"פירוש קצר עבור {normalized_word}{suffix}"
+        return f"Concise meaning for {normalized_word}{suffix}"
