@@ -1,6 +1,6 @@
-# Hebrew Reading Helper Backend (V1)
+# Hebrew Reading Helper (V1)
 
-FastAPI + SQLite backend implementing `backend-v1-spec.md`.
+FastAPI + SQLite API plus a vanilla JS frontend implementing the first end-to-end product slice from `backend-v1-spec.md` and `frontend-v1-spec.md`.
 
 ## Run
 
@@ -24,6 +24,12 @@ Health check:
 curl http://127.0.0.1:8000/health
 ```
 
+UI:
+
+```bash
+open http://127.0.0.1:8000/
+```
+
 ## Test
 
 ```bash
@@ -35,6 +41,11 @@ Or:
 ```bash
 make test
 ```
+
+Current automated coverage includes:
+- API end-to-end flow assertions (users/texts/reader/words/meanings).
+- Frontend-served asset checks and UI interaction hook checks.
+- Frontend-assisted journey coverage for inline rename, sentence navigation/jump boundaries, words pagination, and token state updates.
 
 ## Sample Hebrew Story (Easy Modern Hebrew, Full Nikkud)
 
@@ -61,6 +72,8 @@ With the API running:
 make smoke
 ```
 
+Smoke currently validates user creation, text creation, sentence load, words listing, and text progress lookup.
+
 ## API Highlights
 
 - `POST /v1/users`
@@ -79,6 +92,15 @@ make smoke
 - `GET /v1/users/{user_id}/words/{normalized_word}/meanings`
 - `POST /v1/users/{user_id}/words/{normalized_word}/meanings/generate`
 - `DELETE /v1/users/{user_id}/words/{normalized_word}/meanings/{meaning_id}`
+
+## Frontend Coverage (Current)
+
+- App shell with API base URL + health check.
+- User lifecycle UI: list/create/delete/restore/select.
+- Per-user text library: list/create/rename/delete with progress.
+- Reader view: sentence navigation and token state updates.
+- Word list: filter + single-word state updates.
+- Meanings panel: manual list/generate/delete for selected token.
 
 ## Notes
 

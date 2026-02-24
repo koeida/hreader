@@ -252,6 +252,61 @@ def test_meanings_generate_list_delete_and_timeout_error(tmp_path: Path) -> None
         assert timeout.json()["error"]["message"] == "meaning_generation_timeout"
 
 
+def test_frontend_assisted_journey_rename_jump_pagination_and_state_updates(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client, "Journey")
+        text_id = create_text(
+            client,
+            user_id,
+            "טיוטה",
+            "שָׁלוֹם לָכֶם. הַבַּיִת גָּדוֹל. הַיֶּלֶד קוֹרֵא.",
+        )
+
+        renamed = client.patch(f"/v1/users/{user_id}/texts/{text_id}", json={"title": "סיפור מעודכן"})
+        assert renamed.status_code == 200
+        assert renamed.json()["title"] == "סיפור מעודכן"
+
+        first_sentence = client.get(f"/v1/users/{user_id}/texts/{text_id}/sentences/0")
+        assert first_sentence.status_code == 200
+        assert first_sentence.json()["sentence_index"] == 0
+        assert first_sentence.json()["next_sentence_index"] == 1
+
+        jumped_sentence = client.get(f"/v1/users/{user_id}/texts/{text_id}/sentences/2")
+        assert jumped_sentence.status_code == 200
+        assert jumped_sentence.json()["sentence_index"] == 2
+        assert jumped_sentence.json()["prev_sentence_index"] == 1
+        assert jumped_sentence.json()["next_sentence_index"] is None
+
+        out_of_range = client.get(f"/v1/users/{user_id}/texts/{text_id}/sentences/3")
+        assert out_of_range.status_code == 404
+        assert out_of_range.json()["error"]["message"] == "sentence_not_found"
+
+        page_1 = client.get(f"/v1/users/{user_id}/words?page=1&limit=2")
+        assert page_1.status_code == 200
+        assert page_1.json()["page"] == 1
+        assert page_1.json()["limit"] == 2
+        assert len(page_1.json()["items"]) == 2
+        assert page_1.json()["total"] >= 4
+
+        page_2 = client.get(f"/v1/users/{user_id}/words?page=2&limit=2")
+        assert page_2.status_code == 200
+        assert page_2.json()["page"] == 2
+        assert len(page_2.json()["items"]) >= 1
+
+        normalized = first_sentence.json()["tokens"][0]["normalized_word"]
+        updated = client.put(f"/v1/users/{user_id}/words/{normalized}", json={"state": "known"})
+        assert updated.status_code == 200
+        assert updated.json()["state"] == "known"
+
+        known_words = client.get(f"/v1/users/{user_id}/words?state=known")
+        assert known_words.status_code == 200
+        assert any(item["normalized_word"] == normalized for item in known_words.json()["items"])
+
+        progress = client.get(f"/v1/users/{user_id}/texts/{text_id}/progress")
+        assert progress.status_code == 200
+        assert progress.json()["known_count"] >= 1
+
+
 def test_end_to_end_core_flow(tmp_path: Path) -> None:
     with make_client(tmp_path, generator=CountingGenerator()) as client:
         user_id = create_user(client, "End2End")
