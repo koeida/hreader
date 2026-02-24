@@ -123,8 +123,11 @@ const state = {
   sentenceIndex: 0,
   maxSentenceIndex: null,
   selectedWord: "",
+  currentSentence: null,
+  isWordModalOpen: false,
   wordsPage: 1,
   wordsLimit: 50,
+  activeView: localStorage.getItem("active_view") || "library",
   requestVersion: {
     users: 0,
     texts: 0,
@@ -155,7 +158,6 @@ const el = {
   readerMeta: document.getElementById("reader-meta"),
   readerState: document.getElementById("reader-state"),
   readerSentence: document.getElementById("reader-sentence"),
-  readerTokens: document.getElementById("reader-tokens"),
   prevSentence: document.getElementById("prev-sentence"),
   nextSentence: document.getElementById("next-sentence"),
   jumpSentenceForm: document.getElementById("jump-sentence-form"),
@@ -173,7 +175,15 @@ const el = {
   meaningContext: document.getElementById("meaning-context"),
   meaningsState: document.getElementById("meanings-state"),
   meaningsList: document.getElementById("meanings-list"),
+  modalWordState: document.getElementById("modal-word-state"),
+  wordModal: document.getElementById("word-modal"),
+  wordModalBackdrop: document.getElementById("word-modal-backdrop"),
+  closeWordModal: document.getElementById("close-word-modal"),
+  wordModalSurface: document.getElementById("word-modal-surface"),
+  viewButtons: Array.from(document.querySelectorAll("[data-view-target]")),
+  viewPanels: Array.from(document.querySelectorAll("[data-view-panel]")),
 };
+const VIEW_ORDER = ["library", "reader", "words"];
 
 function nextRequestVersion(key) {
   state.requestVersion[key] += 1;
@@ -227,6 +237,35 @@ function renderListState(listNode, stateNode, options) {
 function requireUser() {
   if (!state.activeUserId) {
     throw new Error("Select a user first");
+  }
+}
+
+function setActiveView(viewName, persist = true) {
+  const allowedViews = new Set(VIEW_ORDER);
+  const nextView = allowedViews.has(viewName) ? viewName : "library";
+  state.activeView = nextView;
+  if (persist) {
+    localStorage.setItem("active_view", nextView);
+  }
+
+  for (const btn of el.viewButtons) {
+    const isActive = btn.dataset.viewTarget === nextView;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    btn.tabIndex = isActive ? 0 : -1;
+  }
+  for (const panel of el.viewPanels) {
+    panel.classList.toggle("is-hidden", panel.dataset.viewPanel !== nextView);
+  }
+  if (nextView !== "reader") {
+    closeWordModal();
+  }
+}
+
+function focusView(viewName) {
+  const target = el.viewButtons.find((btn) => btn.dataset.viewTarget === viewName);
+  if (target) {
+    target.focus();
   }
 }
 
@@ -297,19 +336,20 @@ function clearUserScopedViews() {
   state.texts = [];
   state.openTextId = "";
   state.maxSentenceIndex = null;
+  state.currentSentence = null;
   state.selectedWord = "";
   state.wordsPage = 1;
   el.textsList.innerHTML = "";
   el.readerMeta.textContent = "No text open";
   setStateMessage(el.readerState, "");
   el.readerSentence.textContent = "";
-  el.readerTokens.innerHTML = "";
   el.wordsList.innerHTML = "";
   el.wordsPageLabel.textContent = "Page 1";
   el.wordsPrevPage.disabled = true;
   el.wordsNextPage.disabled = true;
   el.meaningsList.innerHTML = "";
-  el.meaningsWord.textContent = "No word selected";
+  closeWordModal();
+  el.meaningsWord.textContent = "Select a word";
 }
 
 async function loadUsers() {
@@ -361,17 +401,21 @@ function renderTexts() {
 
     const open = document.createElement("button");
     open.type = "button";
-    open.textContent = "Open";
+    open.textContent = "Open in Reader";
+    open.title = "Open this text in Reader view";
     open.onclick = async () => {
       state.openTextId = text.text_id;
       state.sentenceIndex = 0;
       state.maxSentenceIndex = null;
+      state.currentSentence = null;
+      setActiveView("reader");
       await loadSentence();
     };
 
     const rename = document.createElement("button");
     rename.type = "button";
-    rename.textContent = "Edit title";
+    rename.textContent = "Rename";
+    rename.title = "Rename this text";
 
     const renameForm = document.createElement("form");
     renameForm.className = "inline-form rename-form";
@@ -437,9 +481,10 @@ function renderTexts() {
       if (state.openTextId === text.text_id) {
         state.openTextId = "";
         state.maxSentenceIndex = null;
+        state.currentSentence = null;
         el.readerMeta.textContent = "No text open";
         el.readerSentence.textContent = "";
-        el.readerTokens.innerHTML = "";
+        closeWordModal();
       }
       await loadTexts();
     };
@@ -473,9 +518,51 @@ async function loadTexts() {
   }
 }
 
+const SENTENCE_SPLIT_RE = /([\s,;:!?()[\]{}"'“”׳״]+)/;
+const HEBREW_MAQAF = "\u05be";
+const NIKKUD_RE = /[\u0591-\u05bd\u05bf-\u05c7]/g;
+const NUMERIC_ONLY_RE = /^\d+$/;
+const PUNCT_ONLY_RE = /^[^\w\u0590-\u05ff]+$/u;
+
+function normalizeTokenForLookup(token) {
+  const cleaned = (token || "").replaceAll(NIKKUD_RE, "").trim();
+  if (!cleaned || NUMERIC_ONLY_RE.test(cleaned) || PUNCT_ONLY_RE.test(cleaned)) {
+    return null;
+  }
+  const hasLatin = /[a-z]/i.test(cleaned);
+  return hasLatin ? cleaned.toLowerCase() : cleaned;
+}
+
+function buildWordStateMap(tokens) {
+  const out = new Map();
+  for (const token of tokens) {
+    out.set(token.normalized_word, token.state);
+  }
+  return out;
+}
+
+function openWordModal() {
+  state.isWordModalOpen = true;
+  el.wordModal.classList.add("is-open");
+  el.wordModal.setAttribute("aria-hidden", "false");
+  el.meaningsWord.textContent = state.selectedWord || "No word selected";
+  const tokenState = state.currentSentence?.tokens?.find((t) => t.normalized_word === state.selectedWord)?.state;
+  if (tokenState) {
+    el.modalWordState.value = tokenState;
+  }
+  el.modalWordState.focus();
+}
+
+function closeWordModal() {
+  state.isWordModalOpen = false;
+  el.wordModal.classList.remove("is-open");
+  el.wordModal.setAttribute("aria-hidden", "true");
+  el.wordModal.removeAttribute("data-busy");
+}
+
 function renderSentence(data) {
+  state.currentSentence = data;
   el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index}`;
-  el.readerSentence.textContent = data.sentence_text;
   el.prevSentence.disabled = data.prev_sentence_index === null;
   el.nextSentence.disabled = data.next_sentence_index === null;
   el.prevSentence.dataset.target = data.prev_sentence_index;
@@ -487,68 +574,53 @@ function renderSentence(data) {
   el.jumpSentenceIndex.value = String(data.sentence_index);
   el.jumpSentenceIndex.max = state.maxSentenceIndex === null ? "" : String(state.maxSentenceIndex);
 
-  el.readerTokens.innerHTML = "";
-  if (data.tokens.length === 0) {
-    const row = document.createElement("div");
-    row.className = "empty-row";
-    row.textContent = "No eligible words in this sentence";
-    el.readerTokens.appendChild(row);
-    return;
+  const wordStateByNormalized = buildWordStateMap(data.tokens);
+  if (state.selectedWord && !wordStateByNormalized.has(state.selectedWord)) {
+    state.selectedWord = "";
+    closeWordModal();
+    el.meaningsWord.textContent = "Select a word";
   }
 
-  for (const token of data.tokens) {
-    const row = document.createElement("div");
-    row.className = "token-row";
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `token-word ${token.state}`;
-    btn.textContent = token.token;
-    if (state.selectedWord === token.normalized_word) {
-      btn.classList.add("active");
+  el.readerSentence.innerHTML = "";
+  const fragments = data.sentence_text.split(SENTENCE_SPLIT_RE);
+  for (const fragment of fragments) {
+    if (!fragment) {
+      continue;
     }
-    btn.onclick = async () => {
-      state.selectedWord = token.normalized_word;
-      el.meaningsWord.textContent = state.selectedWord;
-      await loadMeanings();
-    };
-
-    const select = document.createElement("select");
-    select.className = "token-state-select";
-    select.setAttribute("aria-label", `Set state for ${token.token}`);
-    for (const value of ["known", "unknown", "never_seen"]) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value;
-      option.selected = token.state === value;
-      select.appendChild(option);
+    if (SENTENCE_SPLIT_RE.test(fragment)) {
+      el.readerSentence.appendChild(document.createTextNode(fragment));
+      continue;
     }
-    select.onchange = async () => {
-      if (!["known", "unknown", "never_seen"].includes(select.value)) {
-        setStateMessage(el.readerState, "Invalid word state", true);
-        select.value = token.state;
+
+    const maqafParts = fragment.split(HEBREW_MAQAF);
+    maqafParts.forEach((part, index) => {
+      if (index > 0) {
+        el.readerSentence.appendChild(document.createTextNode(HEBREW_MAQAF));
+      }
+      const normalized = normalizeTokenForLookup(part);
+      const tokenState = normalized ? wordStateByNormalized.get(normalized) : null;
+      if (!normalized || !tokenState) {
+        el.readerSentence.appendChild(document.createTextNode(part));
         return;
       }
-      try {
-        select.disabled = true;
-        setStateMessage(el.readerState, "Updating word state...");
-        await state.api.updateWordState(state.activeUserId, token.normalized_word, select.value);
-        await Promise.all([
-          loadSentence(),
-          loadWords(),
-          loadTexts(),
-          state.selectedWord ? loadMeanings() : Promise.resolve(),
-        ]);
-        setStateMessage(el.readerState, "");
-      } catch (err) {
-        setStateMessage(el.readerState, String(err.message || err), true);
-      } finally {
-        select.disabled = false;
-      }
-    };
 
-    row.append(btn, select);
-    el.readerTokens.appendChild(row);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `sentence-word ${tokenState}`;
+      btn.textContent = part;
+      btn.title = `Open details for ${part}`;
+      btn.setAttribute("aria-label", `Open details for ${part}`);
+      if (state.selectedWord === normalized) {
+        btn.classList.add("active");
+      }
+      btn.onclick = async () => {
+        state.selectedWord = normalized;
+        openWordModal();
+        renderSentence(state.currentSentence);
+        await loadMeanings();
+      };
+      el.readerSentence.appendChild(btn);
+    });
   }
 }
 
@@ -613,7 +685,7 @@ function renderWords(data) {
     for (const value of ["known", "unknown", "never_seen"]) {
       const option = document.createElement("option");
       option.value = value;
-      option.textContent = value;
+      option.textContent = value === "never_seen" ? "Never seen" : value[0].toUpperCase() + value.slice(1);
       option.selected = item.state === value;
       select.appendChild(option);
     }
@@ -666,8 +738,18 @@ function renderMeanings(data) {
     del.type = "button";
     del.textContent = "Delete";
     del.onclick = async () => {
-      await state.api.deleteMeaning(state.activeUserId, state.selectedWord, item.meaning_id);
-      await loadMeanings();
+      try {
+        li.classList.add("is-removing");
+        del.disabled = true;
+        el.wordModal.setAttribute("data-busy", "deleting");
+        setStateMessage(el.meaningsState, "Deleting...");
+        await state.api.deleteMeaning(state.activeUserId, state.selectedWord, item.meaning_id);
+        await loadMeanings();
+      } catch (err) {
+        setStateMessage(el.meaningsState, String(err.message || err), true);
+      } finally {
+        el.wordModal.removeAttribute("data-busy");
+      }
     };
     li.appendChild(del);
     el.meaningsList.appendChild(li);
@@ -679,7 +761,7 @@ async function loadMeanings() {
   if (!state.activeUserId || !state.selectedWord) {
     renderListState(el.meaningsList, el.meaningsState, {
       empty: true,
-      emptyMessage: "Pick a token in the reader first",
+      emptyMessage: "Pick a word in the reader first",
     });
     return;
   }
@@ -697,6 +779,29 @@ async function loadMeanings() {
       return;
     }
     renderListState(el.meaningsList, el.meaningsState, { error: String(err.message || err) });
+  }
+}
+
+async function updateSelectedWordState(nextState) {
+  if (!["known", "unknown", "never_seen"].includes(nextState)) {
+    setStateMessage(el.readerState, "Invalid word state", true);
+    return;
+  }
+  if (!state.activeUserId || !state.selectedWord) {
+    setStateMessage(el.readerState, "Select a word first", true);
+    return;
+  }
+
+  try {
+    el.modalWordState.disabled = true;
+    setStateMessage(el.readerState, "Updating word state...");
+    await state.api.updateWordState(state.activeUserId, state.selectedWord, nextState);
+    await Promise.all([loadSentence(), loadWords(), loadTexts(), loadMeanings()]);
+    setStateMessage(el.readerState, "");
+  } catch (err) {
+    setStateMessage(el.readerState, String(err.message || err), true);
+  } finally {
+    el.modalWordState.disabled = false;
   }
 }
 
@@ -718,6 +823,39 @@ el.saveApiBase.onclick = () => {
 };
 
 el.checkHealth.onclick = () => checkHealth();
+for (const button of el.viewButtons) {
+  button.onclick = () => setActiveView(button.dataset.viewTarget || "library");
+  button.onkeydown = (event) => {
+    const currentView = button.dataset.viewTarget || "library";
+    const currentIndex = VIEW_ORDER.indexOf(currentView);
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      const nextView = VIEW_ORDER[(currentIndex + 1) % VIEW_ORDER.length];
+      setActiveView(nextView);
+      focusView(nextView);
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      const nextView = VIEW_ORDER[(currentIndex - 1 + VIEW_ORDER.length) % VIEW_ORDER.length];
+      setActiveView(nextView);
+      focusView(nextView);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      setActiveView(VIEW_ORDER[0]);
+      focusView(VIEW_ORDER[0]);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      const lastView = VIEW_ORDER[VIEW_ORDER.length - 1];
+      setActiveView(lastView);
+      focusView(lastView);
+    }
+  };
+}
 el.includeDeleted.onchange = () => {
   state.includeDeleted = el.includeDeleted.checked;
   loadUsers();
@@ -743,6 +881,25 @@ el.wordsNextPage.onclick = () => {
   state.wordsPage += 1;
   loadWords();
 };
+el.wordModalBackdrop.onclick = () => closeWordModal();
+el.closeWordModal.onclick = () => closeWordModal();
+el.modalWordState.onchange = () => updateSelectedWordState(el.modalWordState.value);
+el.wordModalSurface.onkeydown = (event) => {
+  if (event.key === "Escape") {
+    closeWordModal();
+  }
+};
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.isWordModalOpen) {
+    closeWordModal();
+  }
+});
+window.addEventListener("pointermove", (event) => {
+  const x = `${Math.round((event.clientX / window.innerWidth) * 100)}%`;
+  const y = `${Math.round((event.clientY / window.innerHeight) * 100)}%`;
+  document.documentElement.style.setProperty("--mouse-x", x);
+  document.documentElement.style.setProperty("--mouse-y", y);
+});
 
 el.createUserForm.onsubmit = async (event) => {
   event.preventDefault();
@@ -821,18 +978,34 @@ el.jumpSentenceForm.onsubmit = async (event) => {
 
 el.generateMeaningForm.onsubmit = async (event) => {
   event.preventDefault();
+  const submitButton = el.generateMeaningForm.querySelector("button[type='submit']");
+  const originalSubmitText = submitButton ? submitButton.textContent : "";
   try {
     requireUser();
-    if (!state.selectedWord) throw new Error("Pick a token in reader first");
+    if (!state.selectedWord) throw new Error("Pick a word in reader first");
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Generating...";
+    }
+    el.wordModal.setAttribute("data-busy", "generating");
+    setStateMessage(el.meaningsState, "Generating...");
     await state.api.generateMeaning(state.activeUserId, state.selectedWord, el.meaningContext.value.trim());
+    el.meaningContext.value = "";
     await loadMeanings();
   } catch (err) {
     setStateMessage(el.meaningsState, String(err.message || err), true);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalSubmitText || "Generate English Meaning";
+    }
+    el.wordModal.removeAttribute("data-busy");
   }
 };
 
 (async function bootstrap() {
   el.wordsLimit.value = String(state.wordsLimit);
+  setActiveView(state.activeView, false);
   await checkHealth();
   await loadUsers();
   if (state.activeUserId) {

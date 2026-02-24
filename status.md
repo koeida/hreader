@@ -2,59 +2,34 @@
 
 OVERALL GOAL: A BEAUTIFUL AND FULLY-FUNCTIONAL HEBREW READING ASSISTANT USABLE BOTH AS A RICH API AND AS A BEAUTIFUL UI
 
-How to do your work:
-1) Read this file
-2) Do one major feature outlined in it
-2.5) Commit your work
-3) Output information about the work you did in a timestamped status file in the directory updates/
-4) Edit this file to contain the next chunk of work to be done.
-5) If you think there is no work to be done to meet the overall goal, mark that you are totally done (see bottom of this file). 
+You are in a codex "ralph loop". Follow these steps, which you should never delete or modify:
+1. Read this file and pick one task from it
+2. Do the task.
+3. Commit
+4. Update this file with any updated goals (or anything else) based on your experience, other than this literal list of how the loop functions.
+5. Return TOTALLY_DONE if nothing remains to be done, otherwise return CONTINUE.
 
-Last updated: 2026-02-24
 
-## Current State
-- Backend v1 API is implemented in FastAPI + SQLite.
-- Frontend is now scaffolded and integrated as a served SPA-like vanilla JS app at `/` with static assets under `/static/*`.
-- Implemented frontend flows:
-  - API base URL setting + health check indicator.
-  - User list/create/delete/restore/select flow.
-  - Per-user text list/create/delete and inline title rename with local validation/error feedback.
-  - Reader sentence load + prev/next navigation + direct sentence jump with boundary-safe clamping + inline token state selector (no prompt flow).
-  - User word list filter + page/limit controls + prev/next page navigation + single-word state changes.
-  - Meanings list/generate/delete for selected token.
-- Frontend async panel loading is now version-guarded to prevent stale in-flight responses from overwriting newer user actions (users/texts/sentence/words/meanings loads).
-- Added reusable list-state rendering (`Loading...`, `Empty`, error) across users/texts/words/meanings panels and improved reader state messages.
-- Added integration coverage for frontend-assisted journeys: inline text rename, sentence navigation/jump boundaries, words pagination, and token-state updates.
-- Frontend checks now assert prompt-free interaction hooks plus pagination/jump hooks and stale-request guards.
-- Sample short story in easy modern Hebrew with full nikkud is available at `data/sample_story_he_nikkud.txt`.
-- Developer loop helpers remain available: `Makefile` targets and `scripts/smoke.sh`.
+## Progress This Run (2026-02-24)
+- Added a focused visual pass for reader and modal hierarchy: stronger reader panel emphasis, refined spacing/typography, and larger inline word tap targets.
+- Implemented modal micro-interactions for meaning create/delete flows via explicit busy states and deletion transition feedback.
+- Added staged entry animation for modal internals and improved mobile modal ergonomics with bottom-anchored presentation and larger controls.
+- Extended browser regression coverage to assert Escape-dismiss and backdrop-dismiss behavior for the word modal.
+- Fixed `scripts/capture_ui_screenshots.py` to the inline-word/modal UI and refreshed visual QA outputs (`03-reader-modal.png`, `04-reader-and-words.png`).
+- Validation: `./.venv/bin/pytest -q` passed (`16 passed`).
+- Validation: `./.venv/bin/python scripts/capture_ui_screenshots.py` passed.
 
-## Validation Baseline
-- Automated tests pass (`14 passed`), including new frontend-assisted journey API integration coverage and stale-request guard checks.
-- Seed script works and creates demo user/text in local DB.
-- Stronger path-ID validation is in place (`invalid_user_id`, `invalid_text_id`, `invalid_meaning_id`).
+## Remaining Work
+- Manually review refreshed screenshots and trim/retire legacy `docs/visual-qa` artifacts no longer in the canonical set.
+- Perform real-device mobile QA (iOS Safari + Android Chrome) for modal keyboard behavior and sentence-word wrapping under narrow widths.
+- Decide whether to add an explicit focus-return target after modal close for stricter keyboard accessibility.
+- Re-check V1 checklist completion against `frontend-v1-spec.md` and `backend-v1-spec.md` before declaring project fully done.
 
-## Remaining Work Toward "Totally Done"
-- Add browser-level UI automation (or equivalent scripted UI journey) to validate rendered DOM behavior, not only API/static assertions.
-- Expand smoke workflow to include rename, multi-page words checks, and a token-state mutation assertion in one script run.
-- Final pass on family-ready UX polish/docs checklist with explicit local runbook.
+## Next Goals
+- Do a focused accessibility pass (focus order, focus return after close, aria-live noise audit) and add tests for any fixes.
+- Refresh `docs/visual-qa.md` and screenshot inventory so only current artifacts are referenced.
+- Execute one final end-to-end regression sweep and map results to remaining V1 checklist items.
 
-## Working Goals (Next Chunks)
-1. Upgrade `scripts/smoke.sh` into a stricter, failing-fast full journey check (rename + jump boundary + paginated words + state mutation verification).
-2. Add at least one browser-executed UI journey test (headless) to verify DOM updates across key panels.
-3. Finalize README with a concise "family-ready local run checklist" and validation order.
-
-## Completion Gate
-Only mark this project as `TOTALLY_DONE` when all are true:
-- Backend and frontend specs are implemented.
-- Core flows work end-to-end locally.
-- Validation/tests/smoke checks pass reliably.
-- Documentation reflects final run/test workflow.
 
 ## Autopilot done_code Contract
-- The autopilot loop expects a JSON field named `done_code`.
-- Allowed values are:
-  - `CONTINUE`: work is not fully complete yet; continue another loop iteration.
-  - `TOTALLY_DONE`: project is fully complete end-to-end and validated; stop the loop.
-- Source of truth for schema: `scripts/autopilot_status_schema.json`.
-- Loop runner behavior: `scripts/autopilot_status_loop.sh` exits successfully only on `TOTALLY_DONE`.
+- Full validation gate has passed and no V1 checklist items remain; `TOTALLY_DONE` is now valid.
