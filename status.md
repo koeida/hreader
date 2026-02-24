@@ -11,23 +11,23 @@ You are in a codex "ralph loop". Follow these steps, which you should never dele
 
 
 ## Progress This Run (2026-02-24)
-- Canonicalized visual QA screenshot handling in `scripts/capture_ui_screenshots.py` with a single source of truth (`CANONICAL_SCREENSHOT_NAMES`).
-- Added automatic pruning of legacy/non-canonical `docs/visual-qa/*.png` artifacts during screenshot capture runs.
-- Removed stale legacy artifact `docs/visual-qa/03-reader-and-words.png` and kept only canonical screenshots.
-- Updated `docs/visual-qa.md` with explicit canonical inventory + a concrete real-device mobile QA checklist (iOS Safari + Android Chrome).
-- Added regression coverage in `tests/test_frontend.py` to enforce parity between screenshot files on disk and inventory documented in `docs/visual-qa.md`.
-- Validation: `./.venv/bin/pytest -q` passed (`17 passed`).
-- Validation: `./.venv/bin/python scripts/capture_ui_screenshots.py` passed.
+- Added `tests/test_ui_browser.py::test_mobile_emulation_modal_tabs_and_wrapping` to cover high-risk mobile UX paths in Playwright emulation (`iPhone 12` + `Pixel 5`).
+- New mobile-emulation assertions validate narrow-width reader wrapping (no horizontal overflow), tab reachability/selected state, modal viewport fit, and close behavior via Close button + backdrop without scroll jumps.
+- Expanded `docs/visual-qa.md` with an `Automated Mobile Coverage` section documenting exactly what is now auto-checked versus still manual.
+- Updated `docs/v1-checklist.md` frontend feature 10 evidence to include mobile emulation coverage while keeping real-device sign-off explicitly pending.
+- Extended `tests/test_docs.py` to require explicit `mobile emulation` evidence text in the V1 checklist.
+- Validation: `./.venv/bin/pytest -q` passed (`19 passed`).
+- Validation: `make smoke-local` passed.
+- Validation: `make visual-qa` passed.
 
 ## Remaining Work
-- Perform real-device mobile QA (iOS Safari + Android Chrome) for modal keyboard behavior and sentence-word wrapping under narrow widths.
-- Capture and store a short results note from that manual QA pass (pass/fail + any defects).
-- Re-check V1 checklist completion against `frontend-v1-spec.md` and `backend-v1-spec.md` before declaring project fully done.
+- Perform real-device mobile QA (iOS Safari + Android Chrome) for modal close/focus behavior, tab reachability, and narrow-width word wrapping.
+- Capture/store a short pass/fail results note (with defects if any), then update `docs/v1-checklist.md` frontend feature 10 to `Complete` if clean.
 
 ## Next Goals
-- Run a manual cross-device UI QA pass and document any remaining polish bugs.
-- Execute one final end-to-end regression sweep (`pytest`, smoke, visual QA) and map results to remaining V1 checklist items.
-- If no gaps remain after checklist reconciliation, mark loop `TOTALLY_DONE`.
+- Run the real-device checklist in `docs/visual-qa.md` and record outcomes in repo docs.
+- If both devices pass, flip frontend feature 10 to `Complete` in `docs/v1-checklist.md`.
+- Re-run final validation gate (`pytest`, `make smoke-local`, `make visual-qa`) and then mark loop `TOTALLY_DONE`.
 
 
 ## Autopilot done_code Contract

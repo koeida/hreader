@@ -27,6 +27,17 @@ Any non-canonical PNG files already under `docs/visual-qa/` are removed automati
 - Escape closes the word modal and returns focus to reader flow.
 - Word state changes are reflected in the words panel when filtered by `known`.
 
+## Automated Mobile Coverage
+
+`tests/test_ui_browser.py::test_mobile_emulation_modal_tabs_and_wrapping` runs Playwright mobile emulation for:
+- iPhone 12 viewport profile.
+- Pixel 5 viewport profile.
+
+Automated checks cover:
+- Top-level tab buttons remain reachable and update `aria-selected`.
+- Reader sentence layout at narrow widths does not horizontally overflow.
+- Word modal opens within viewport width and closes cleanly via Close button and backdrop without scroll jumps.
+
 ## Real-Device Mobile QA Checklist
 
 Run this pass manually on:
