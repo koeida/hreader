@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutopilotLoopResult",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "done_code": {
+      "type": "string",
+      "enum": ["CONTINUE", "TOTALLY_DONE"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": ["done_code", "summary", "next_actions"]
+}
