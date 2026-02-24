@@ -1,6 +1,7 @@
 # Visual QA Notes
 
 This project includes a lightweight visual QA pass for the family-ready UI.
+The active desktop design direction is defined in `docs/ui-beauty-spec.md`.
 
 ## Generate Current Screenshots
 
@@ -42,32 +43,39 @@ Automated checks cover:
 - Word modal opens within viewport width and closes cleanly via Close button and backdrop without scroll jumps.
 - Escape and Close-button modal paths restore focus to the originating inline word button.
 
-## Real-Device Mobile QA Checklist
+## Desktop Browser QA Checklist
 
 Run this pass manually on:
-- iOS Safari (current iOS major release).
-- Android Chrome (current Android major release).
+- Desktop Chromium (current stable major release).
+- Desktop Firefox (current stable major release).
+- Desktop WebKit (Safari-family desktop engine/current stable).
 
 Before testing, generate a dated report template:
 
 ```bash
-.venv/bin/python scripts/new_mobile_qa_report.py
+.venv/bin/python scripts/new_desktop_qa_report.py
 ```
 
-Fill the generated file in `docs/qa-reports/mobile-real-device-YYYYMMDD.md` while testing.
+Fill the generated file in `docs/qa-reports/desktop-browser-qa-YYYYMMDD.md` while testing.
 
-Checks:
-- Tap an inline sentence word, then close via backdrop, Escape-equivalent/keyboard (if attached), and Close button; focus should remain logical and no off-screen jumps should occur.
-- With narrow width (`<= 390px`), sentence words wrap naturally without overlap/cut-off in reader panel.
-- Top-level view tabs remain reachable and correctly update selected state.
-- Word modal controls remain fully visible without horizontal scrolling.
-
-After testing:
-- If both devices pass, run:
+Optional automated pass (fills the same report format automatically):
 
 ```bash
-.venv/bin/python scripts/finalize_v1_checklist.py --report docs/qa-reports/mobile-real-device-YYYYMMDD.md
+.venv/bin/python scripts/run_desktop_browser_qa.py --force
 ```
 
-This validates iOS/Android PASS rows plus overall PASS, then marks Frontend checklist item 10 `Complete` with a report reference.
-- If either device fails, keep item 10 `Pending` and record defects in the report.
+Checks:
+- Click an inline sentence word, then close via backdrop, Escape, and Close button; focus should remain logical and no off-screen jumps should occur.
+- Reader sentence words and panels should remain readable without horizontal overflow at desktop widths.
+- Top-level view tabs remain reachable and correctly update selected state.
+- Word modal controls remain fully visible within viewport bounds.
+
+After testing:
+- If all browsers pass, run:
+
+```bash
+.venv/bin/python scripts/finalize_v1_checklist.py --report docs/qa-reports/desktop-browser-qa-YYYYMMDD.md
+```
+
+This validates Chromium/Firefox/WebKit PASS rows plus overall PASS, then marks Frontend checklist item 10 `Complete` with a report reference.
+- If any browser fails, keep item 10 `Pending` and record defects in the report.
