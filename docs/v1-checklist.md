@@ -76,7 +76,7 @@ Evidence: request-version guards in frontend, mutation-driven refresh across pan
 
 10. UX Hardening + Basic QA Gates: `Pending`
 Evidence complete: keyboard tab navigation, accessibility roles/labels, smoke + browser + visual QA artifacts, Playwright Chromium mobile emulation checks for iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping), and Playwright WebKit iPhone 12 emulation coverage for modal focus restoration + tab state changes.
-Remaining: manual real-device pass on iOS Safari and Android Chrome per `docs/visual-qa.md`.
+Remaining: manual real-device pass on iOS Safari and Android Chrome per `docs/visual-qa.md`, documented in a dated report under `docs/qa-reports/mobile-real-device-YYYYMMDD.md`.
 
 ## Current Release Gate
 

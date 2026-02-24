@@ -11,22 +11,25 @@ You are in a codex "ralph loop". Follow these steps, which you should never dele
 
 
 ## Progress This Run (2026-02-24)
-- Added `tests/test_ui_browser.py::test_mobile_webkit_emulation_modal_tabs_and_focus` to extend mobile UX regression coverage to the WebKit engine (Safari-family proxy) with iPhone 12 emulation.
-- New WebKit assertions validate tab `aria-selected` changes, modal close via Escape + Close button, focus restoration back to inline word buttons, and narrow-width sentence wrapping.
-- Updated `docs/visual-qa.md` to document cross-engine automated mobile coverage (Chromium + WebKit) and what still requires physical-device verification.
-- Updated `docs/v1-checklist.md` frontend feature 10 evidence to include the new WebKit coverage while keeping real-device sign-off explicitly pending.
-- Extended `tests/test_docs.py` so checklist documentation must mention `WebKit` in addition to mobile emulation and device targets.
-- Validation: `./.venv/bin/pytest -q` passed (`19 passed, 1 skipped` - WebKit runtime skipped when unavailable in environment).
+- Added `scripts/new_mobile_qa_report.py` to generate a dated real-device QA checklist artifact: `docs/qa-reports/mobile-real-device-YYYYMMDD.md`.
+- Documented script-driven report generation in `docs/visual-qa.md` so the final iOS Safari/Android Chrome pass has a single repeatable workflow.
+- Added `docs/qa-reports/README.md` to define where mobile sign-off reports live.
+- Updated `docs/v1-checklist.md` frontend item 10 remaining-work line to require a dated report artifact path.
+- Extended docs tests:
+  - `tests/test_docs.py` now enforces the mobile report path and generation command references.
+  - Added `tests/test_mobile_qa_report_script.py` to validate report generation content and filename.
+- Validation: `./.venv/bin/pytest -q` passed (`21 passed, 1 skipped`).
 - Validation: `make smoke-local` passed.
 - Validation: `make visual-qa` passed.
 
 ## Remaining Work
-- Perform real-device mobile QA (physical iOS Safari + Android Chrome) for modal close/focus behavior, tab reachability, and narrow-width word wrapping.
-- Capture/store a short pass/fail results note (with defects if any), then update `docs/v1-checklist.md` frontend feature 10 from `Pending` to `Complete` if clean.
+- Perform real-device mobile QA on physical iOS Safari and Android Chrome using a generated report from `.venv/bin/python scripts/new_mobile_qa_report.py`.
+- Fill the dated report in `docs/qa-reports/` with pass/fail outcomes and any defects.
+- If both devices pass, update `docs/v1-checklist.md` frontend feature 10 from `Pending` to `Complete` with report reference.
 
 ## Next Goals
-- Run the real-device checklist in `docs/visual-qa.md` and record outcomes in repo docs.
-- If both devices pass, flip frontend feature 10 to `Complete` in `docs/v1-checklist.md`.
+- Run `.venv/bin/python scripts/new_mobile_qa_report.py`, execute the checklist on physical devices, and complete the report.
+- Promote frontend checklist item 10 to `Complete` once both devices pass.
 - Re-run final validation gate (`pytest`, `make smoke-local`, `make visual-qa`) and then mark loop `TOTALLY_DONE`.
 
 

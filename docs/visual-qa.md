@@ -48,8 +48,20 @@ Run this pass manually on:
 - iOS Safari (current iOS major release).
 - Android Chrome (current Android major release).
 
+Before testing, generate a dated report template:
+
+```bash
+.venv/bin/python scripts/new_mobile_qa_report.py
+```
+
+Fill the generated file in `docs/qa-reports/mobile-real-device-YYYYMMDD.md` while testing.
+
 Checks:
 - Tap an inline sentence word, then close via backdrop, Escape-equivalent/keyboard (if attached), and Close button; focus should remain logical and no off-screen jumps should occur.
 - With narrow width (`<= 390px`), sentence words wrap naturally without overlap/cut-off in reader panel.
 - Top-level view tabs remain reachable and correctly update selected state.
 - Word modal controls remain fully visible without horizontal scrolling.
+
+After testing:
+- If both devices pass, mark Frontend checklist item 10 `Complete` in `docs/v1-checklist.md` and reference the report file.
+- If either device fails, keep item 10 `Pending` and record defects in the report.
