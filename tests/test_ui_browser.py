@@ -221,3 +221,46 @@ def test_reader_sentence_enforces_rtl_word_bubble_order(live_server: str) -> Non
 
         context.close()
         browser.close()
+
+
+def test_duplicate_words_cycle_updates_all_occurrences(live_server: str) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        context = browser.new_context(base_url=live_server)
+        page = context.new_page()
+        page.goto("/", wait_until="networkidle")
+
+        page.fill("#new-user-name", "Duplicate User")
+        page.click("#create-user-form button[type='submit']")
+        page.wait_for_selector("#users-list li")
+
+        page.fill("#new-text-title", "Duplicate Sentence")
+        page.fill("#new-text-content", "אָבָא אָבָא יֶלֶד.")
+        page.click("#create-text-form button[type='submit']")
+        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+        page.click("#texts-list li button:has-text('Open in Reader')")
+        page.wait_for_selector(".sentence-word")
+
+        page.locator(".sentence-word").first.click()
+        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unseen'")
+        page.locator(".sentence-word").nth(1).click()
+        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unknown'")
+
+        all_unknown = page.evaluate(
+            """
+            () => {
+              const words = Array.from(document.querySelectorAll('.sentence-word')).filter((node) => node.textContent?.trim() === 'אָבָא');
+              return words.length >= 2 && words.every((node) => node.classList.contains('unknown'));
+            }
+            """
+        )
+        assert all_unknown is True
+
+        context.close()
+        browser.close()

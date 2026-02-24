@@ -565,6 +565,17 @@ function selectedToken() {
   return state.currentSentence.tokens.find((token) => token.normalized_word === state.selectedWord) || null;
 }
 
+function updateSelectedWordTokens(nextState) {
+  if (!state.currentSentence || !state.selectedWord) {
+    return;
+  }
+  for (const token of state.currentSentence.tokens) {
+    if (token.normalized_word === state.selectedWord) {
+      token.state = nextState;
+    }
+  }
+}
+
 function renderWordDetailsPanel() {
   if (!state.selectedWord) {
     el.wordDetailsPanel.classList.add("is-hidden");
@@ -836,7 +847,7 @@ async function onSentenceWordActivated(word) {
   }
 
   const nextState = cycleState(token.state);
-  token.state = nextState;
+  updateSelectedWordTokens(nextState);
   setStateMessage(el.wordDetailsState, "");
   renderSentence();
   animateSelectionPulse();
