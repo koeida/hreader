@@ -19,6 +19,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from app.main import create_app
 
+CANONICAL_SCREENSHOT_NAMES = (
+    "01-empty-shell.png",
+    "02-user-and-text-library.png",
+    "03-reader-modal.png",
+    "04-reader-and-words.png",
+)
+
 
 def find_free_port() -> int:
     with contextlib.closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
@@ -44,6 +51,10 @@ def wait_for_health(base_url: str, timeout_seconds: float = 20.0) -> None:
 def main() -> int:
     output_dir = REPO_ROOT / "docs" / "visual-qa"
     output_dir.mkdir(parents=True, exist_ok=True)
+    canonical_names = set(CANONICAL_SCREENSHOT_NAMES)
+    for existing_file in output_dir.glob("*.png"):
+        if existing_file.name not in canonical_names:
+            existing_file.unlink()
 
     with tempfile.TemporaryDirectory(prefix="hreader-visual-qa-") as tmp_dir:
         db_path = Path(tmp_dir) / "visual-qa.db"
@@ -65,7 +76,7 @@ def main() -> int:
                 page = context.new_page()
 
                 page.goto("/", wait_until="networkidle")
-                page.screenshot(path=str(output_dir / "01-empty-shell.png"), full_page=True)
+                page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[0]), full_page=True)
 
                 page.fill("#new-user-name", "QA Parent")
                 page.click("#create-user-form button[type='submit']")
@@ -76,7 +87,7 @@ def main() -> int:
                 page.fill("#new-text-content", text_body)
                 page.click("#create-text-form button[type='submit']")
                 page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-                page.screenshot(path=str(output_dir / "02-user-and-text-library.png"), full_page=True)
+                page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[1]), full_page=True)
 
                 page.click("#texts-list li button:has-text('Open in Reader')")
                 page.wait_for_function(
@@ -86,14 +97,14 @@ def main() -> int:
                 page.wait_for_selector("#word-modal.is-open")
                 page.select_option("#modal-word-state", "known")
                 page.wait_for_timeout(200)
-                page.screenshot(path=str(output_dir / "03-reader-modal.png"), full_page=True)
+                page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[2]), full_page=True)
                 page.keyboard.press("Escape")
                 page.wait_for_selector("#word-modal:not(.is-open)")
 
                 page.click("#view-words")
                 page.select_option("#words-filter", "known")
                 page.wait_for_timeout(250)
-                page.screenshot(path=str(output_dir / "04-reader-and-words.png"), full_page=True)
+                page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[3]), full_page=True)
 
                 context.close()
                 browser.close()
