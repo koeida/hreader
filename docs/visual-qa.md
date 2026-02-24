@@ -33,10 +33,14 @@ Any non-canonical PNG files already under `docs/visual-qa/` are removed automati
 - iPhone 12 viewport profile.
 - Pixel 5 viewport profile.
 
+`tests/test_ui_browser.py::test_mobile_webkit_emulation_modal_tabs_and_focus` adds a WebKit-based mobile pass for:
+- iPhone 12 viewport profile on the WebKit engine (Safari-family behavior proxy).
+
 Automated checks cover:
 - Top-level tab buttons remain reachable and update `aria-selected`.
 - Reader sentence layout at narrow widths does not horizontally overflow.
 - Word modal opens within viewport width and closes cleanly via Close button and backdrop without scroll jumps.
+- Escape and Close-button modal paths restore focus to the originating inline word button.
 
 ## Real-Device Mobile QA Checklist
 

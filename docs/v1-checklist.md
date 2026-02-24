@@ -75,7 +75,7 @@ Evidence: explicit fetch + generate + delete meaning actions in UI.
 Evidence: request-version guards in frontend, mutation-driven refresh across panels.
 
 10. UX Hardening + Basic QA Gates: `Pending`
-Evidence complete: keyboard tab navigation, accessibility roles/labels, smoke + browser + visual QA artifacts, and Playwright mobile emulation checks for iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping).
+Evidence complete: keyboard tab navigation, accessibility roles/labels, smoke + browser + visual QA artifacts, Playwright Chromium mobile emulation checks for iPhone 12 + Pixel 5 (tab reachability, modal close paths, narrow-width wrapping), and Playwright WebKit iPhone 12 emulation coverage for modal focus restoration + tab state changes.
 Remaining: manual real-device pass on iOS Safari and Android Chrome per `docs/visual-qa.md`.
 
 ## Current Release Gate

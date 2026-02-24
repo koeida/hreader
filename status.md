@@ -11,18 +11,18 @@ You are in a codex "ralph loop". Follow these steps, which you should never dele
 
 
 ## Progress This Run (2026-02-24)
-- Added `tests/test_ui_browser.py::test_mobile_emulation_modal_tabs_and_wrapping` to cover high-risk mobile UX paths in Playwright emulation (`iPhone 12` + `Pixel 5`).
-- New mobile-emulation assertions validate narrow-width reader wrapping (no horizontal overflow), tab reachability/selected state, modal viewport fit, and close behavior via Close button + backdrop without scroll jumps.
-- Expanded `docs/visual-qa.md` with an `Automated Mobile Coverage` section documenting exactly what is now auto-checked versus still manual.
-- Updated `docs/v1-checklist.md` frontend feature 10 evidence to include mobile emulation coverage while keeping real-device sign-off explicitly pending.
-- Extended `tests/test_docs.py` to require explicit `mobile emulation` evidence text in the V1 checklist.
-- Validation: `./.venv/bin/pytest -q` passed (`19 passed`).
+- Added `tests/test_ui_browser.py::test_mobile_webkit_emulation_modal_tabs_and_focus` to extend mobile UX regression coverage to the WebKit engine (Safari-family proxy) with iPhone 12 emulation.
+- New WebKit assertions validate tab `aria-selected` changes, modal close via Escape + Close button, focus restoration back to inline word buttons, and narrow-width sentence wrapping.
+- Updated `docs/visual-qa.md` to document cross-engine automated mobile coverage (Chromium + WebKit) and what still requires physical-device verification.
+- Updated `docs/v1-checklist.md` frontend feature 10 evidence to include the new WebKit coverage while keeping real-device sign-off explicitly pending.
+- Extended `tests/test_docs.py` so checklist documentation must mention `WebKit` in addition to mobile emulation and device targets.
+- Validation: `./.venv/bin/pytest -q` passed (`19 passed, 1 skipped` - WebKit runtime skipped when unavailable in environment).
 - Validation: `make smoke-local` passed.
 - Validation: `make visual-qa` passed.
 
 ## Remaining Work
-- Perform real-device mobile QA (iOS Safari + Android Chrome) for modal close/focus behavior, tab reachability, and narrow-width word wrapping.
-- Capture/store a short pass/fail results note (with defects if any), then update `docs/v1-checklist.md` frontend feature 10 to `Complete` if clean.
+- Perform real-device mobile QA (physical iOS Safari + Android Chrome) for modal close/focus behavior, tab reachability, and narrow-width word wrapping.
+- Capture/store a short pass/fail results note (with defects if any), then update `docs/v1-checklist.md` frontend feature 10 from `Pending` to `Complete` if clean.
 
 ## Next Goals
 - Run the real-device checklist in `docs/visual-qa.md` and record outcomes in repo docs.

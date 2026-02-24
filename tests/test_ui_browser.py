@@ -223,3 +223,57 @@ def test_mobile_emulation_modal_tabs_and_wrapping(live_server: str) -> None:
             context.close()
 
         browser.close()
+
+
+def test_mobile_webkit_emulation_modal_tabs_and_focus(live_server: str) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.webkit.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright WebKit runtime unavailable: {exc}")
+
+        context = browser.new_context(**p.devices["iPhone 12"], base_url=live_server)
+        page = context.new_page()
+        page.goto("/", wait_until="networkidle")
+
+        page.fill("#new-user-name", "WebKit User")
+        page.click("#create-user-form button[type='submit']")
+        page.wait_for_selector("#users-list li")
+
+        long_sentence = " ".join([f"מילה{i}" for i in range(1, 30)])
+        page.fill("#new-text-title", "WebKit Mobile Text")
+        page.fill("#new-text-content", f"שָׁלוֹם לָכֶם. {long_sentence}.")
+        page.click("#create-text-form button[type='submit']")
+        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+        page.click("#texts-list li button:has-text('Open in Reader')")
+        page.wait_for_selector(".sentence-word")
+
+        for view in ("#view-library", "#view-reader", "#view-words", "#view-reader"):
+            page.click(view)
+            page.wait_for_function(
+                "(selector) => document.querySelector(selector).getAttribute('aria-selected') === 'true'",
+                arg=view,
+            )
+
+        page.click(".sentence-word")
+        page.wait_for_selector("#word-modal.is-open")
+        page.keyboard.press("Escape")
+        page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
+        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
+
+        page.click(".sentence-word")
+        page.wait_for_selector("#word-modal.is-open")
+        page.click("#close-word-modal")
+        page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
+        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
+
+        sentence_has_no_x_overflow = page.eval_on_selector(
+            "#reader-sentence",
+            "node => node.scrollWidth <= node.clientWidth + 1",
+        )
+        assert sentence_has_no_x_overflow is True
+
+        context.close()
+        browser.close()

@@ -14,4 +14,5 @@ def test_v1_checklist_covers_all_backend_and_frontend_features() -> None:
     assert "iOS Safari" in checklist
     assert "Android Chrome" in checklist
     assert "mobile emulation" in checklist
+    assert "WebKit" in checklist
     assert "Pending" in checklist
