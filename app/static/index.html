@@ -56,15 +56,6 @@
             Words
           </button>
         </nav>
-        <div class="api-controls">
-          <label>
-            API Base URL
-            <input id="api-base-url" type="url" placeholder="http://127.0.0.1:8000" />
-          </label>
-          <button id="save-api-base" type="button">Save</button>
-          <button id="check-health" type="button">Check API</button>
-          <span id="health-indicator" class="pill">Unknown</span>
-        </div>
       </header>
 
       <section id="panel-library-users" class="panel" data-view-panel="library">
@@ -116,28 +107,33 @@
           <h2>Reader</h2>
           <span id="reader-meta" class="pill">No text open</span>
         </div>
-        <div class="reader-state-legend" aria-label="Word state legend">
-          <span class="legend-pill known">Known</span>
-          <span class="legend-pill unknown">Unknown</span>
-          <span class="legend-pill never_seen">Never seen</span>
-        </div>
         <p id="reader-sentence" class="sentence" lang="he" dir="rtl"></p>
         <div id="reader-state" class="state" role="status" aria-live="polite"></div>
         <div class="nav-row">
           <button id="prev-sentence" type="button" title="Go to previous sentence">Previous</button>
           <button id="next-sentence" type="button" title="Go to next sentence">Next</button>
         </div>
-        <form id="jump-sentence-form" class="row-form">
-          <input
-            id="jump-sentence-index"
-            type="number"
-            min="0"
-            step="1"
-            placeholder="Sentence index"
-            aria-label="Jump to sentence index"
-          />
-          <button id="jump-sentence-btn" type="submit">Jump to Sentence</button>
-        </form>
+
+        <section id="word-details-panel" class="word-details-panel is-hidden" aria-live="polite">
+          <div class="panel-title-row">
+            <h3>Word Details</h3>
+            <span id="word-details-word" class="pill">No word selected</span>
+          </div>
+          <div class="word-details-meta">
+            <span class="inline-label">Status:</span>
+            <span id="word-details-status" class="status-label">Unseen</span>
+          </div>
+          <div id="word-details-state" class="state" role="status" aria-live="polite"></div>
+
+          <form id="generate-meaning-form" class="stack-form">
+            <textarea id="meaning-context" placeholder="Optional sentence context"></textarea>
+            <button type="submit">Generate English Meaning</button>
+          </form>
+
+          <div id="meanings-state" class="state" role="status" aria-live="polite"></div>
+          <div id="meanings-preview" class="meaning-preview"></div>
+          <ul id="meanings-list" class="list"></ul>
+        </section>
       </section>
 
       <section id="panel-words" class="panel" data-view-panel="words">
@@ -172,44 +168,6 @@
         <div id="words-state" class="state" role="status" aria-live="polite"></div>
         <ul id="words-list" class="list"></ul>
       </section>
-
-      <div id="word-modal" class="word-modal" aria-hidden="true">
-        <button
-          id="word-modal-backdrop"
-          class="word-modal__backdrop"
-          type="button"
-          tabindex="-1"
-          aria-label="Close word details"
-        ></button>
-        <section
-          id="word-modal-surface"
-          class="word-modal__surface"
-          role="dialog"
-          tabindex="-1"
-          aria-modal="true"
-          aria-labelledby="word-modal-title"
-        >
-          <div class="panel-title-row">
-            <h2 id="word-modal-title">Word Details</h2>
-            <span id="meanings-word" class="pill">No word selected</span>
-          </div>
-          <label>
-            Word state
-            <select id="modal-word-state" aria-label="Word state">
-              <option value="known">Known</option>
-              <option value="unknown">Unknown</option>
-              <option value="never_seen">Never seen</option>
-            </select>
-          </label>
-          <button id="close-word-modal" class="secondary" type="button">Close</button>
-          <form id="generate-meaning-form" class="stack-form">
-            <textarea id="meaning-context" placeholder="Optional sentence context"></textarea>
-            <button type="submit">Generate English Meaning</button>
-          </form>
-          <div id="meanings-state" class="state" role="status" aria-live="polite"></div>
-          <ul id="meanings-list" class="list"></ul>
-        </section>
-      </div>
     </main>
     <script type="module" src="/static/app.js"></script>
   </body>

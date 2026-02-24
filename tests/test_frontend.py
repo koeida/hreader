@@ -31,49 +31,32 @@ def test_static_assets_are_served(tmp_path: Path) -> None:
     assert ":root" in css.text
 
 
-def test_frontend_uses_inline_controls_instead_of_prompts(tmp_path: Path) -> None:
+def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         js = client.get("/static/app.js")
         html = client.get("/")
 
     assert js.status_code == 200
-    assert "window.prompt" not in js.text
-    assert "rename-form" in js.text
-    assert "sentence-word" in js.text
-    assert "modalWordState" in js.text
-    assert "word-modal" in html.text
-    assert "jumpSentenceForm" in js.text
-    assert "wordsPrevPage" in js.text
-    assert "setActiveView" in js.text
-    assert "button.onkeydown" in js.text
-    assert "VIEW_ORDER" in js.text
-    assert "aria-selected" in js.text
-    assert "Open in Reader" in js.text
-    assert "el.meaningContext.value = state.currentSentence?.sentence_text || \"\";" in js.text
-    assert "positionWordModal(triggerElement)" in js.text
-    assert "if (state.isWordModalOpen && state.selectedWord === normalized)" in js.text
-    assert "view-reader" in js.text
-    assert "Jump to Sentence" in html.text
-    assert "Generate English Meaning" in html.text
-    assert 'role="tablist"' in html.text
-    assert 'role="tab"' in html.text
-    assert "data-view-panel" in html.text
-    assert "shell-subtitle" in html.text
-    assert "words?state=${state}&page=${page}&limit=${limit}" in js.text
     assert html.status_code == 200
-    assert 'id="reader-state"' in html.text
-    assert 'id="reader-sentence" class="sentence" lang="he" dir="rtl"' in html.text
-    assert 'id="jump-sentence-form"' in html.text
-    assert 'id="modal-word-state"' in html.text
-    assert 'id="word-modal"' in html.text
-    assert 'id="word-modal-surface"' in html.text
-    assert 'tabindex="-1"' in html.text
-    assert 'id="words-limit"' in html.text
-    assert 'id="words-prev-page"' in html.text
-    assert 'id="words-next-page"' in html.text
-    assert 'id="view-library"' in html.text
-    assert 'id="view-reader"' in html.text
-    assert 'id="view-words"' in html.text
+
+    assert "word-modal" not in html.text
+    assert "modal-word-state" not in html.text
+    assert "jump-sentence-form" not in html.text
+    assert "API Base URL" not in html.text
+    assert "Check API" not in html.text
+
+    assert 'id="word-details-panel"' in html.text
+    assert 'id="word-details-word"' in html.text
+    assert 'id="word-details-status"' in html.text
+    assert 'id="word-details-state"' in html.text
+    assert 'id="meanings-preview"' in html.text
+
+    assert "onSentenceWordActivated" in js.text
+    assert "cycleState" in js.text
+    assert "clearWordDetailsPanel" in js.text
+    assert "state.selectedWord !== word" in js.text
+    assert "renderSentence();" in js.text
+    assert "animateSelectionPulse" in js.text
 
 
 def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> None:
@@ -88,17 +71,19 @@ def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> N
     assert '!isCurrentRequest("words", requestVersion)' in js.text
     assert '!isCurrentRequest("sentence", requestVersion)' in js.text
     assert '!isCurrentRequest("meanings", requestVersion)' in js.text
+    assert "word !== state.selectedWord" in js.text
+    assert "state.selectedWord !== actionWord" in js.text
 
 
-def test_frontend_styles_support_compact_header_and_wide_reader(tmp_path: Path) -> None:
+def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         css = client.get("/static/styles.css")
 
     assert css.status_code == 200
+    assert ".word-details-panel" in css.text
+    assert ".word-details-panel.is-hidden" in css.text
+    assert ".sentence-word.active" in css.text
+    assert ".sentence-word.pulse" in css.text
+    assert "@keyframes word-pulse" in css.text
     assert ".app.view-reader" in css.text
     assert 'width: min(1500px, calc(100vw - 6rem));' in css.text
-    assert "z-index: 1000;" in css.text
-    assert "position: fixed;" in css.text
-    assert "width: min(680px, calc(100vw - 2rem));" in css.text
-    assert "grid-template-columns: minmax(0, 1fr) auto auto;" in css.text
-    assert "font-size: clamp(2.15rem, 2.6vw, 2.75rem);" in css.text

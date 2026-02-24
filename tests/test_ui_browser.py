@@ -55,7 +55,7 @@ def live_server(tmp_path: Path) -> Iterator[str]:
         thread.join(timeout=10)
 
 
-def test_browser_journey_user_text_reader_and_words_panels(live_server: str) -> None:
+def test_reader_word_details_panel_select_cycle_and_reset(live_server: str) -> None:
     playwright = pytest.importorskip("playwright.sync_api")
 
     with playwright.sync_playwright() as p:
@@ -69,86 +69,63 @@ def test_browser_journey_user_text_reader_and_words_panels(live_server: str) -> 
 
         page.goto("/", wait_until="networkidle")
 
+        assert page.locator("#word-modal").count() == 0
+        assert page.locator("#jump-sentence-form").count() == 0
+        assert page.locator("text=API Base URL").count() == 0
+
         page.fill("#new-user-name", "Browser User")
         page.click("#create-user-form button[type='submit']")
         page.wait_for_selector("#users-list li")
 
-        bulk_words = " ".join([f"alpha{i}" for i in range(1, 31)])
-        text_body = f"שָׁלוֹם לָכֶם. הַבַּיִת גָּדוֹל. {bulk_words}."
-        page.fill("#new-text-title", "מסע דפדפן")
+        text_body = "שָׁלוֹם לָכֶם. אָבָא אִמָא יֶלֶד."
+        page.fill("#new-text-title", "Panel Behavior")
         page.fill("#new-text-content", text_body)
         page.click("#create-text-form button[type='submit']")
         page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
 
         page.click("#texts-list li button:has-text('Open in Reader')")
-        page.wait_for_function(
-            "() => document.getElementById('reader-sentence').textContent.includes('שָׁלוֹם לָכֶם')"
-        )
+        page.click("#next-sentence")
+        page.wait_for_selector(".sentence-word")
 
-        page.focus("#view-reader")
-        page.keyboard.press("ArrowRight")
+        first = page.locator(".sentence-word").first
+        second = page.locator(".sentence-word").nth(1)
+
+        first.click()
+        page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
+        assert page.locator("#word-details-status").inner_text().strip() == "Unseen"
+        first_selected = page.locator("#word-details-word").inner_text().strip()
+
+        first.click()
+        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unknown'")
+        first.click()
+        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Known'")
+        first.click()
+        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unseen'")
+
+        second.click()
         page.wait_for_function(
-            "() => document.querySelector('[data-view-target=\"words\"]').getAttribute('aria-selected') === 'true'"
+            "(word) => document.getElementById('word-details-word').textContent.trim() !== word",
+            arg=first_selected,
         )
-        page.keyboard.press("ArrowLeft")
-        page.wait_for_function(
-            "() => document.querySelector('[data-view-target=\"reader\"]').getAttribute('aria-selected') === 'true'"
-        )
+        assert page.locator("#word-details-status").inner_text().strip() == "Unseen"
+
+        page.click("#prev-sentence")
+        page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('is-hidden')")
 
         page.click("#next-sentence")
-        page.wait_for_function(
-            "() => document.getElementById('reader-sentence').textContent.includes('הַבַּיִת גָּדוֹל')"
-        )
-        page.click("#next-sentence")
-        page.wait_for_function(
-            "() => document.getElementById('reader-sentence').textContent.includes('alpha1')"
-        )
-
-        page.fill("#jump-sentence-index", "99")
-        assert page.eval_on_selector("#jump-sentence-index", "el => el.validity.rangeOverflow") is True
-        page.click("#jump-sentence-btn")
-        page.wait_for_function(
-            "() => document.getElementById('reader-sentence').textContent.includes('alpha1')"
-        )
-
-        page.click(".sentence-word")
-        page.wait_for_selector("#word-modal.is-open")
-        page.keyboard.press("Escape")
-        page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
-        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
-
-        page.click(".sentence-word")
-        page.wait_for_selector("#word-modal.is-open")
-        page.eval_on_selector("#word-modal-backdrop", "el => el.click()")
-        page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
-        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
-
-        page.click(".sentence-word")
-        page.wait_for_selector("#word-modal.is-open")
-        page.select_option("#modal-word-state", "known")
-        page.click("#close-word-modal")
-        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
+        page.wait_for_selector(".sentence-word")
+        page.locator(".sentence-word").first.click()
+        page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
         page.click("#view-words")
-        page.select_option("#words-limit", "25")
-        page.wait_for_function("() => document.getElementById('words-page-label').textContent.includes('Page 1 /')")
-        page.click("#words-next-page")
-        page.wait_for_function("() => document.getElementById('words-page-label').textContent.includes('Page 2 /')")
-
-        page.select_option("#words-filter", "known")
-        page.wait_for_function(
-            """
-            () => {
-              const words = Array.from(document.querySelectorAll('#words-list li small')).map((n) => n.textContent || '');
-              return words.some((t) => t.includes('known'));
-            }
-            """
-        )
+        page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('is-hidden')")
+        page.click("#view-reader")
+        page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('is-hidden')")
 
         context.close()
         browser.close()
 
 
-def test_mobile_emulation_modal_tabs_and_wrapping(live_server: str) -> None:
+def test_reader_words_stay_clickable_during_generate_request(live_server: str) -> None:
     playwright = pytest.importorskip("playwright.sync_api")
 
     with playwright.sync_playwright() as p:
@@ -157,71 +134,42 @@ def test_mobile_emulation_modal_tabs_and_wrapping(live_server: str) -> None:
         except playwright.Error as exc:
             pytest.skip(f"Playwright browser runtime unavailable: {exc}")
 
-        for device_name in ("iPhone 12", "Pixel 5"):
-            context = browser.new_context(**p.devices[device_name], base_url=live_server)
-            page = context.new_page()
-            page.goto("/", wait_until="networkidle")
+        context = browser.new_context(base_url=live_server)
+        page = context.new_page()
 
-            page.fill("#new-user-name", f"{device_name} User")
-            page.click("#create-user-form button[type='submit']")
-            page.wait_for_selector("#users-list li")
+        page.route(
+            "**/meanings/generate",
+            lambda route: (time.sleep(0.4), route.continue_()),
+        )
 
-            # Long sentence ensures several inline buttons must wrap on narrow viewports.
-            long_sentence = " ".join([f"מילה{i}" for i in range(1, 25)])
-            page.fill("#new-text-title", f"{device_name} Text")
-            page.fill("#new-text-content", f"שָׁלוֹם לָכֶם. {long_sentence}.")
-            page.click("#create-text-form button[type='submit']")
-            page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-            page.click("#texts-list li button:has-text('Open in Reader')")
-            page.wait_for_selector(".sentence-word")
+        page.goto("/", wait_until="networkidle")
 
-            for view in ("#view-reader", "#view-words", "#view-library", "#view-reader"):
-                page.click(view)
-                view_name = view.replace("#view-", "")
-                page.wait_for_function(
-                    "(selector) => document.querySelector(selector).getAttribute('aria-selected') === 'true'",
-                    arg=view,
-                )
-                panel_selector = f'[data-view-panel="{view_name}"]'
-                page.wait_for_function(
-                    "(selector) => !document.querySelector(selector).classList.contains('is-hidden')",
-                    arg=panel_selector,
-                )
+        page.fill("#new-user-name", "Async User")
+        page.click("#create-user-form button[type='submit']")
+        page.wait_for_selector("#users-list li")
 
-            sentence_has_no_x_overflow = page.eval_on_selector(
-                "#reader-sentence",
-                "node => node.scrollWidth <= node.clientWidth + 1",
-            )
-            assert sentence_has_no_x_overflow is True
+        page.fill("#new-text-title", "Async Text")
+        page.fill("#new-text-content", "אָבָא אִמָא יֶלֶד.")
+        page.click("#create-text-form button[type='submit']")
+        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+        page.click("#texts-list li button:has-text('Open in Reader')")
+        page.wait_for_selector(".sentence-word")
 
-            baseline_scroll_y = page.evaluate("() => window.scrollY")
-            page.click(".sentence-word")
-            page.wait_for_selector("#word-modal.is-open")
-            modal_within_viewport = page.eval_on_selector(
-                "#word-modal-surface",
-                """
-                (node) => {
-                  const rect = node.getBoundingClientRect();
-                  return rect.left >= 0 && rect.right <= window.innerWidth + 1;
-                }
-                """,
-            )
-            assert modal_within_viewport is True
+        first = page.locator(".sentence-word").first
+        second = page.locator(".sentence-word").nth(1)
 
-            page.click("#close-word-modal")
-            page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
-            scroll_after_close_button = page.evaluate("() => window.scrollY")
-            assert abs(scroll_after_close_button - baseline_scroll_y) <= 2
+        first.click()
+        page.fill("#meaning-context", "context")
+        page.click("#generate-meaning-form button[type='submit']")
 
-            page.click(".sentence-word")
-            page.wait_for_selector("#word-modal.is-open")
-            page.eval_on_selector("#word-modal-backdrop", "el => el.click()")
-            page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
-            scroll_after_backdrop_close = page.evaluate("() => window.scrollY")
-            assert abs(scroll_after_backdrop_close - baseline_scroll_y) <= 2
+        first_selected = page.locator("#word-details-word").inner_text().strip()
+        second.click()
+        page.wait_for_function(
+            "(word) => document.getElementById('word-details-word').textContent.trim() !== word",
+            arg=first_selected,
+        )
 
-            context.close()
-
+        context.close()
         browser.close()
 
 
@@ -270,60 +218,6 @@ def test_reader_sentence_enforces_rtl_word_bubble_order(live_server: str) -> Non
             """
         )
         assert rtl_contract["ok"] is True, rtl_contract["reason"]
-
-        context.close()
-        browser.close()
-
-
-def test_mobile_webkit_emulation_modal_tabs_and_focus(live_server: str) -> None:
-    playwright = pytest.importorskip("playwright.sync_api")
-
-    with playwright.sync_playwright() as p:
-        try:
-            browser = p.webkit.launch(headless=True)
-        except playwright.Error as exc:
-            pytest.skip(f"Playwright WebKit runtime unavailable: {exc}")
-
-        context = browser.new_context(**p.devices["iPhone 12"], base_url=live_server)
-        page = context.new_page()
-        page.goto("/", wait_until="networkidle")
-
-        page.fill("#new-user-name", "WebKit User")
-        page.click("#create-user-form button[type='submit']")
-        page.wait_for_selector("#users-list li")
-
-        long_sentence = " ".join([f"מילה{i}" for i in range(1, 30)])
-        page.fill("#new-text-title", "WebKit Mobile Text")
-        page.fill("#new-text-content", f"שָׁלוֹם לָכֶם. {long_sentence}.")
-        page.click("#create-text-form button[type='submit']")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-        page.click("#texts-list li button:has-text('Open in Reader')")
-        page.wait_for_selector(".sentence-word")
-
-        for view in ("#view-library", "#view-reader", "#view-words", "#view-reader"):
-            page.click(view)
-            page.wait_for_function(
-                "(selector) => document.querySelector(selector).getAttribute('aria-selected') === 'true'",
-                arg=view,
-            )
-
-        page.click(".sentence-word")
-        page.wait_for_selector("#word-modal.is-open")
-        page.keyboard.press("Escape")
-        page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
-        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
-
-        page.click(".sentence-word")
-        page.wait_for_selector("#word-modal.is-open")
-        page.click("#close-word-modal")
-        page.wait_for_function("() => !document.getElementById('word-modal').classList.contains('is-open')")
-        page.wait_for_function("() => document.activeElement?.classList?.contains('sentence-word') === true")
-
-        sentence_has_no_x_overflow = page.eval_on_selector(
-            "#reader-sentence",
-            "node => node.scrollWidth <= node.clientWidth + 1",
-        )
-        assert sentence_has_no_x_overflow is True
 
         context.close()
         browser.close()

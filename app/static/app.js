@@ -31,10 +31,6 @@ class ApiClient {
     return body;
   }
 
-  health() {
-    return this.request("/health", { method: "GET" });
-  }
-
   listUsers(includeDeleted = false) {
     return this.request(`/v1/users?include_deleted=${includeDeleted}`, { method: "GET" });
   }
@@ -124,7 +120,6 @@ const state = {
   maxSentenceIndex: null,
   selectedWord: "",
   currentSentence: null,
-  isWordModalOpen: false,
   wordsPage: 1,
   wordsLimit: 50,
   activeView: localStorage.getItem("active_view") || "library",
@@ -134,17 +129,12 @@ const state = {
     sentence: 0,
     words: 0,
     meanings: 0,
+    wordSave: 0,
   },
-  lastWordTriggerElement: null,
-  lastWordTriggerId: "",
 };
 
 const el = {
   appRoot: document.querySelector("[data-testid='app-root']"),
-  apiBaseUrl: document.getElementById("api-base-url"),
-  saveApiBase: document.getElementById("save-api-base"),
-  checkHealth: document.getElementById("check-health"),
-  healthIndicator: document.getElementById("health-indicator"),
   includeDeleted: document.getElementById("include-deleted"),
   refreshUsers: document.getElementById("refresh-users"),
   createUserForm: document.getElementById("create-user-form"),
@@ -163,8 +153,15 @@ const el = {
   readerSentence: document.getElementById("reader-sentence"),
   prevSentence: document.getElementById("prev-sentence"),
   nextSentence: document.getElementById("next-sentence"),
-  jumpSentenceForm: document.getElementById("jump-sentence-form"),
-  jumpSentenceIndex: document.getElementById("jump-sentence-index"),
+  wordDetailsPanel: document.getElementById("word-details-panel"),
+  wordDetailsWord: document.getElementById("word-details-word"),
+  wordDetailsStatus: document.getElementById("word-details-status"),
+  wordDetailsState: document.getElementById("word-details-state"),
+  generateMeaningForm: document.getElementById("generate-meaning-form"),
+  meaningContext: document.getElementById("meaning-context"),
+  meaningsState: document.getElementById("meanings-state"),
+  meaningsPreview: document.getElementById("meanings-preview"),
+  meaningsList: document.getElementById("meanings-list"),
   wordsFilter: document.getElementById("words-filter"),
   wordsLimit: document.getElementById("words-limit"),
   wordsPrevPage: document.getElementById("words-prev-page"),
@@ -173,16 +170,6 @@ const el = {
   refreshWords: document.getElementById("refresh-words"),
   wordsState: document.getElementById("words-state"),
   wordsList: document.getElementById("words-list"),
-  meaningsWord: document.getElementById("meanings-word"),
-  generateMeaningForm: document.getElementById("generate-meaning-form"),
-  meaningContext: document.getElementById("meaning-context"),
-  meaningsState: document.getElementById("meanings-state"),
-  meaningsList: document.getElementById("meanings-list"),
-  modalWordState: document.getElementById("modal-word-state"),
-  wordModal: document.getElementById("word-modal"),
-  wordModalBackdrop: document.getElementById("word-modal-backdrop"),
-  closeWordModal: document.getElementById("close-word-modal"),
-  wordModalSurface: document.getElementById("word-modal-surface"),
   viewButtons: Array.from(document.querySelectorAll("[data-view-target]")),
   viewPanels: Array.from(document.querySelectorAll("[data-view-panel]")),
 };
@@ -243,6 +230,17 @@ function requireUser() {
   }
 }
 
+function clearWordDetailsPanel() {
+  state.selectedWord = "";
+  el.wordDetailsPanel.classList.add("is-hidden");
+  el.wordDetailsWord.textContent = "No word selected";
+  el.wordDetailsStatus.textContent = "Unseen";
+  setStateMessage(el.wordDetailsState, "");
+  setStateMessage(el.meaningsState, "");
+  el.meaningsPreview.innerHTML = "";
+  el.meaningsList.innerHTML = "";
+}
+
 function setActiveView(viewName, persist = true) {
   const allowedViews = new Set(VIEW_ORDER);
   const nextView = allowedViews.has(viewName) ? viewName : "library";
@@ -264,8 +262,10 @@ function setActiveView(viewName, persist = true) {
   for (const panel of el.viewPanels) {
     panel.classList.toggle("is-hidden", panel.dataset.viewPanel !== nextView);
   }
+
   if (nextView !== "reader") {
-    closeWordModal({ restoreFocus: false });
+    clearWordDetailsPanel();
+    renderSentence();
   }
 }
 
@@ -344,7 +344,6 @@ function clearUserScopedViews() {
   state.openTextId = "";
   state.maxSentenceIndex = null;
   state.currentSentence = null;
-  state.selectedWord = "";
   state.wordsPage = 1;
   el.textsList.innerHTML = "";
   el.readerMeta.textContent = "No text open";
@@ -354,9 +353,7 @@ function clearUserScopedViews() {
   el.wordsPageLabel.textContent = "Page 1";
   el.wordsPrevPage.disabled = true;
   el.wordsNextPage.disabled = true;
-  el.meaningsList.innerHTML = "";
-  closeWordModal({ restoreFocus: false });
-  el.meaningsWord.textContent = "Select a word";
+  clearWordDetailsPanel();
 }
 
 async function loadUsers() {
@@ -415,6 +412,7 @@ function renderTexts() {
       state.sentenceIndex = 0;
       state.maxSentenceIndex = null;
       state.currentSentence = null;
+      clearWordDetailsPanel();
       setActiveView("reader");
       await loadSentence();
     };
@@ -489,9 +487,9 @@ function renderTexts() {
         state.openTextId = "";
         state.maxSentenceIndex = null;
         state.currentSentence = null;
+        clearWordDetailsPanel();
         el.readerMeta.textContent = "No text open";
         el.readerSentence.textContent = "";
-        closeWordModal({ restoreFocus: false });
       }
       await loadTexts();
     };
@@ -548,84 +546,56 @@ function buildWordStateMap(tokens) {
   return out;
 }
 
-function isFocusableElement(node) {
-  return node instanceof HTMLElement && node.isConnected && !node.hasAttribute("disabled");
+function stateLabel(value) {
+  if (value === "known") return "Known";
+  if (value === "unknown") return "Unknown";
+  return "Unseen";
 }
 
-function positionWordModal(triggerElement = null) {
-  const surface = el.wordModalSurface;
-  if (!surface) {
+function cycleState(value) {
+  if (value === "never_seen") return "unknown";
+  if (value === "unknown") return "known";
+  return "never_seen";
+}
+
+function selectedToken() {
+  if (!state.currentSentence || !state.selectedWord) {
+    return null;
+  }
+  return state.currentSentence.tokens.find((token) => token.normalized_word === state.selectedWord) || null;
+}
+
+function renderWordDetailsPanel() {
+  if (!state.selectedWord) {
+    el.wordDetailsPanel.classList.add("is-hidden");
     return;
   }
 
-  const fallbackTop = Math.max(12, Math.round(window.innerHeight * 0.08));
-  const fallbackLeft = Math.max(12, Math.round((window.innerWidth - surface.offsetWidth) / 2));
+  const token = selectedToken();
+  el.wordDetailsPanel.classList.remove("is-hidden");
+  el.wordDetailsWord.textContent = state.selectedWord;
+  el.wordDetailsStatus.textContent = stateLabel(token?.state || "never_seen");
+  if (!el.meaningContext.value.trim() && state.currentSentence?.sentence_text) {
+    el.meaningContext.value = state.currentSentence.sentence_text;
+  }
+}
 
-  if (!isFocusableElement(triggerElement)) {
-    surface.style.top = `${fallbackTop}px`;
-    surface.style.left = `${fallbackLeft}px`;
+function animateSelectionPulse() {
+  const activeButtons = Array.from(el.readerSentence.querySelectorAll(".sentence-word.active"));
+  for (const node of activeButtons) {
+    node.classList.remove("pulse");
+    // force restart animation
+    void node.offsetWidth;
+    node.classList.add("pulse");
+  }
+}
+
+function renderSentence(data = state.currentSentence) {
+  if (!data) {
+    el.readerSentence.textContent = "";
     return;
   }
 
-  const rect = triggerElement.getBoundingClientRect();
-  const spacing = 12;
-  const surfaceWidth = surface.offsetWidth || 560;
-  const surfaceHeight = surface.offsetHeight || 420;
-
-  let left = rect.left + rect.width / 2 - surfaceWidth / 2;
-  left = Math.max(spacing, Math.min(window.innerWidth - surfaceWidth - spacing, left));
-
-  let top = rect.bottom + spacing;
-  if (top + surfaceHeight + spacing > window.innerHeight) {
-    top = rect.top - surfaceHeight - spacing;
-  }
-  if (top < spacing) {
-    top = spacing;
-  }
-
-  surface.style.top = `${Math.round(top)}px`;
-  surface.style.left = `${Math.round(left)}px`;
-}
-
-function openWordModal(triggerElement = null) {
-  if (isFocusableElement(triggerElement)) {
-    state.lastWordTriggerElement = triggerElement;
-  }
-  state.lastWordTriggerId = triggerElement?.dataset?.wordButtonId || "";
-  state.isWordModalOpen = true;
-  el.wordModal.classList.add("is-open");
-  el.wordModal.setAttribute("aria-hidden", "false");
-  el.meaningsWord.textContent = state.selectedWord || "No word selected";
-  const tokenState = state.currentSentence?.tokens?.find((t) => t.normalized_word === state.selectedWord)?.state;
-  if (tokenState) {
-    el.modalWordState.value = tokenState;
-  }
-  el.meaningContext.value = state.currentSentence?.sentence_text || "";
-  positionWordModal(triggerElement);
-  el.wordModalSurface.focus();
-}
-
-function closeWordModal(options = {}) {
-  const { restoreFocus = true } = options;
-  state.isWordModalOpen = false;
-  el.wordModal.classList.remove("is-open");
-  el.wordModal.setAttribute("aria-hidden", "true");
-  el.wordModal.removeAttribute("data-busy");
-  if (restoreFocus) {
-    if (isFocusableElement(state.lastWordTriggerElement)) {
-      state.lastWordTriggerElement.focus();
-      return;
-    }
-    if (state.lastWordTriggerId) {
-      const replacement = el.readerSentence.querySelector(`[data-word-button-id="${state.lastWordTriggerId}"]`);
-      if (isFocusableElement(replacement)) {
-        replacement.focus();
-      }
-    }
-  }
-}
-
-function renderSentence(data) {
   state.currentSentence = data;
   el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index}`;
   el.prevSentence.disabled = data.prev_sentence_index === null;
@@ -636,14 +606,10 @@ function renderSentence(data) {
   if (data.next_sentence_index === null) {
     state.maxSentenceIndex = data.sentence_index;
   }
-  el.jumpSentenceIndex.value = String(data.sentence_index);
-  el.jumpSentenceIndex.max = state.maxSentenceIndex === null ? "" : String(state.maxSentenceIndex);
 
   const wordStateByNormalized = buildWordStateMap(data.tokens);
   if (state.selectedWord && !wordStateByNormalized.has(state.selectedWord)) {
-    state.selectedWord = "";
-    closeWordModal({ restoreFocus: false });
-    el.meaningsWord.textContent = "Select a word";
+    clearWordDetailsPanel();
   }
 
   el.readerSentence.innerHTML = "";
@@ -682,18 +648,20 @@ function renderSentence(data) {
       if (state.selectedWord === normalized) {
         btn.classList.add("active");
       }
-      btn.onclick = async () => {
-        if (state.isWordModalOpen && state.selectedWord === normalized) {
-          return;
+
+      const activateWord = () => onSentenceWordActivated(normalized);
+      btn.onclick = activateWord;
+      btn.onkeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          activateWord();
         }
-        state.selectedWord = normalized;
-        openWordModal(btn);
-        renderSentence(state.currentSentence);
-        await loadMeanings();
       };
       el.readerSentence.appendChild(btn);
     });
   }
+
+  renderWordDetailsPanel();
 }
 
 async function loadSentence() {
@@ -793,108 +761,124 @@ async function loadWords() {
 }
 
 function renderMeanings(data) {
-  if (
-    renderListState(el.meaningsList, el.meaningsState, {
-      empty: data.items.length === 0,
-      emptyMessage: "No meanings yet",
-    })
-  ) {
-    return;
+  const items = data.items || [];
+  const newest = items[0] || null;
+
+  if (newest) {
+    el.meaningsPreview.innerHTML = `
+      <div class="meaning-preview-card">
+        <div class="meaning-preview-title">Latest meaning</div>
+        <div>${newest.meaning_text}</div>
+      </div>
+    `;
+  } else {
+    el.meaningsPreview.innerHTML = '<div class="meaning-empty">No meanings yet. Generate one.</div>';
   }
 
   el.meaningsList.innerHTML = "";
-  for (const item of data.items) {
+  for (const item of items) {
     const li = document.createElement("li");
     li.innerHTML = `<div>${item.meaning_text}</div><small>${item.created_at}</small>`;
     const del = document.createElement("button");
     del.type = "button";
     del.textContent = "Delete";
-    del.onclick = async () => {
-      try {
-        li.classList.add("is-removing");
-        del.disabled = true;
-        el.wordModal.setAttribute("data-busy", "deleting");
-        setStateMessage(el.meaningsState, "Deleting...");
-        await state.api.deleteMeaning(state.activeUserId, state.selectedWord, item.meaning_id);
-        await loadMeanings();
-      } catch (err) {
-        setStateMessage(el.meaningsState, String(err.message || err), true);
-      } finally {
-        el.wordModal.removeAttribute("data-busy");
-      }
-    };
+    del.onclick = () => deleteMeaning(item.meaning_id, li);
     li.appendChild(del);
     el.meaningsList.appendChild(li);
   }
+
+  setStateMessage(el.meaningsState, "");
 }
 
-async function loadMeanings() {
+async function loadMeaningsForWord(word) {
   const requestVersion = nextRequestVersion("meanings");
-  if (!state.activeUserId || !state.selectedWord) {
-    renderListState(el.meaningsList, el.meaningsState, {
-      empty: true,
-      emptyMessage: "Pick a word in the reader first",
-    });
+  if (!state.activeUserId || !word) {
+    el.meaningsPreview.innerHTML = '<div class="meaning-empty">Pick a word in the reader first.</div>';
+    el.meaningsList.innerHTML = "";
     return;
   }
-  const requestedWord = state.selectedWord;
 
   renderListState(el.meaningsList, el.meaningsState, { loading: true });
   try {
-    const data = await state.api.listMeanings(state.activeUserId, requestedWord);
-    if (!isCurrentRequest("meanings", requestVersion) || requestedWord !== state.selectedWord) {
+    const data = await state.api.listMeanings(state.activeUserId, word);
+    if (!isCurrentRequest("meanings", requestVersion) || word !== state.selectedWord) {
       return;
     }
     renderMeanings(data);
   } catch (err) {
-    if (!isCurrentRequest("meanings", requestVersion)) {
+    if (!isCurrentRequest("meanings", requestVersion) || word !== state.selectedWord) {
       return;
     }
     renderListState(el.meaningsList, el.meaningsState, { error: String(err.message || err) });
   }
 }
 
-async function updateSelectedWordState(nextState) {
-  if (!["known", "unknown", "never_seen"].includes(nextState)) {
-    setStateMessage(el.readerState, "Invalid word state", true);
-    return;
-  }
-  if (!state.activeUserId || !state.selectedWord) {
-    setStateMessage(el.readerState, "Select a word first", true);
+function setSelectedWord(word) {
+  state.selectedWord = word;
+  setStateMessage(el.wordDetailsState, "");
+  renderSentence();
+  void loadMeaningsForWord(word);
+}
+
+async function onSentenceWordActivated(word) {
+  if (!state.currentSentence || !word) {
     return;
   }
 
+  if (state.selectedWord !== word) {
+    setSelectedWord(word);
+    return;
+  }
+
+  const token = selectedToken();
+  if (!token) {
+    return;
+  }
+
+  const nextState = cycleState(token.state);
+  token.state = nextState;
+  setStateMessage(el.wordDetailsState, "");
+  renderSentence();
+  animateSelectionPulse();
+
+  const requestVersion = nextRequestVersion("wordSave");
+  const wordAtSaveStart = word;
   try {
-    el.modalWordState.disabled = true;
-    setStateMessage(el.readerState, "Updating word state...");
-    await state.api.updateWordState(state.activeUserId, state.selectedWord, nextState);
-    await Promise.all([loadSentence(), loadWords(), loadTexts(), loadMeanings()]);
-    setStateMessage(el.readerState, "");
+    await state.api.updateWordState(state.activeUserId, wordAtSaveStart, nextState);
+    if (!isCurrentRequest("wordSave", requestVersion) || state.selectedWord !== wordAtSaveStart) {
+      return;
+    }
+    setStateMessage(el.wordDetailsState, "");
   } catch (err) {
-    setStateMessage(el.readerState, String(err.message || err), true);
-  } finally {
-    el.modalWordState.disabled = false;
+    if (!isCurrentRequest("wordSave", requestVersion) || state.selectedWord !== wordAtSaveStart) {
+      return;
+    }
+    setStateMessage(el.wordDetailsState, `Save failed: ${String(err.message || err)}`, true);
   }
 }
 
-async function checkHealth() {
+async function deleteMeaning(meaningId, rowNode) {
+  const actionWord = state.selectedWord;
+  if (!actionWord) {
+    return;
+  }
   try {
-    el.healthIndicator.textContent = "Checking...";
-    const result = await state.api.health();
-    el.healthIndicator.textContent = result.status === "ok" ? "Healthy" : "Unhealthy";
+    rowNode.classList.add("is-removing");
+    setStateMessage(el.meaningsState, "Deleting...");
+    await state.api.deleteMeaning(state.activeUserId, actionWord, meaningId);
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, "");
+    await loadMeaningsForWord(actionWord);
   } catch (err) {
-    el.healthIndicator.textContent = `Error: ${String(err.message || err)}`;
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, `Delete failed: ${String(err.message || err)}`, true);
   }
 }
 
-el.apiBaseUrl.value = localStorage.getItem("api_base_url") || "";
-el.saveApiBase.onclick = () => {
-  localStorage.setItem("api_base_url", el.apiBaseUrl.value.trim());
-  state.api.setBaseUrl(el.apiBaseUrl.value.trim());
-  checkHealth();
-};
-
-el.checkHealth.onclick = () => checkHealth();
 for (const button of el.viewButtons) {
   button.onclick = () => setActiveView(button.dataset.viewTarget || "library");
   button.onkeydown = (event) => {
@@ -928,6 +912,7 @@ for (const button of el.viewButtons) {
     }
   };
 }
+
 el.includeDeleted.onchange = () => {
   state.includeDeleted = el.includeDeleted.checked;
   loadUsers();
@@ -953,37 +938,6 @@ el.wordsNextPage.onclick = () => {
   state.wordsPage += 1;
   loadWords();
 };
-el.wordModalBackdrop.onclick = () => closeWordModal();
-el.closeWordModal.onclick = () => closeWordModal();
-el.modalWordState.onchange = () => updateSelectedWordState(el.modalWordState.value);
-window.addEventListener("resize", () => {
-  if (!state.isWordModalOpen) {
-    return;
-  }
-  const trigger = state.lastWordTriggerId
-    ? el.readerSentence.querySelector(`[data-word-button-id="${state.lastWordTriggerId}"]`)
-    : null;
-  positionWordModal(trigger);
-});
-window.addEventListener("scroll", () => {
-  if (!state.isWordModalOpen) {
-    return;
-  }
-  const trigger = state.lastWordTriggerId
-    ? el.readerSentence.querySelector(`[data-word-button-id="${state.lastWordTriggerId}"]`)
-    : null;
-  positionWordModal(trigger);
-});
-el.wordModalSurface.onkeydown = (event) => {
-  if (event.key === "Escape") {
-    closeWordModal();
-  }
-};
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && state.isWordModalOpen) {
-    closeWordModal();
-  }
-});
 window.addEventListener("pointermove", (event) => {
   const x = `${Math.round((event.clientX / window.innerWidth) * 100)}%`;
   const y = `${Math.round((event.clientY / window.innerHeight) * 100)}%`;
@@ -1033,70 +987,57 @@ el.createTextForm.onsubmit = async (event) => {
 
 el.prevSentence.onclick = async () => {
   if (!el.prevSentence.dataset.target) return;
+  clearWordDetailsPanel();
   state.sentenceIndex = Number(el.prevSentence.dataset.target);
   await loadSentence();
 };
 
 el.nextSentence.onclick = async () => {
   if (!el.nextSentence.dataset.target) return;
+  clearWordDetailsPanel();
   state.sentenceIndex = Number(el.nextSentence.dataset.target);
-  await loadSentence();
-};
-
-el.jumpSentenceForm.onsubmit = async (event) => {
-  event.preventDefault();
-  if (!state.openTextId) {
-    setStateMessage(el.readerState, "Open a text first", true);
-    return;
-  }
-
-  const raw = Number(el.jumpSentenceIndex.value);
-  if (!Number.isInteger(raw)) {
-    setStateMessage(el.readerState, "Enter a whole sentence index", true);
-    return;
-  }
-
-  const minClamped = Math.max(0, raw);
-  const clamped =
-    state.maxSentenceIndex === null ? minClamped : Math.min(state.maxSentenceIndex, minClamped);
-  state.sentenceIndex = clamped;
-  if (clamped !== raw) {
-    setStateMessage(el.readerState, `Jump clamped to ${clamped}`, true);
-  }
   await loadSentence();
 };
 
 el.generateMeaningForm.onsubmit = async (event) => {
   event.preventDefault();
+  const actionWord = state.selectedWord;
+  if (!actionWord) {
+    setStateMessage(el.meaningsState, "Pick a word in reader first", true);
+    return;
+  }
   const submitButton = el.generateMeaningForm.querySelector("button[type='submit']");
   const originalSubmitText = submitButton ? submitButton.textContent : "";
   try {
     requireUser();
-    if (!state.selectedWord) throw new Error("Pick a word in reader first");
     if (submitButton) {
       submitButton.disabled = true;
       submitButton.textContent = "Generating...";
     }
-    el.wordModal.setAttribute("data-busy", "generating");
     setStateMessage(el.meaningsState, "Generating...");
-    await state.api.generateMeaning(state.activeUserId, state.selectedWord, el.meaningContext.value.trim());
+    await state.api.generateMeaning(state.activeUserId, actionWord, el.meaningContext.value.trim());
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, "");
     el.meaningContext.value = "";
-    await loadMeanings();
+    await loadMeaningsForWord(actionWord);
   } catch (err) {
-    setStateMessage(el.meaningsState, String(err.message || err), true);
+    if (state.selectedWord !== actionWord) {
+      return;
+    }
+    setStateMessage(el.meaningsState, `Generate failed: ${String(err.message || err)}`, true);
   } finally {
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = originalSubmitText || "Generate English Meaning";
     }
-    el.wordModal.removeAttribute("data-busy");
   }
 };
 
 (async function bootstrap() {
   el.wordsLimit.value = String(state.wordsLimit);
   setActiveView(state.activeView, false);
-  await checkHealth();
   await loadUsers();
   if (state.activeUserId) {
     await Promise.all([loadTexts(), loadWords()]);
