@@ -135,6 +135,8 @@ const state = {
     words: 0,
     meanings: 0,
   },
+  lastWordTriggerElement: null,
+  lastWordTriggerId: "",
 };
 
 const el = {
@@ -258,7 +260,7 @@ function setActiveView(viewName, persist = true) {
     panel.classList.toggle("is-hidden", panel.dataset.viewPanel !== nextView);
   }
   if (nextView !== "reader") {
-    closeWordModal();
+    closeWordModal({ restoreFocus: false });
   }
 }
 
@@ -348,7 +350,7 @@ function clearUserScopedViews() {
   el.wordsPrevPage.disabled = true;
   el.wordsNextPage.disabled = true;
   el.meaningsList.innerHTML = "";
-  closeWordModal();
+  closeWordModal({ restoreFocus: false });
   el.meaningsWord.textContent = "Select a word";
 }
 
@@ -484,7 +486,7 @@ function renderTexts() {
         state.currentSentence = null;
         el.readerMeta.textContent = "No text open";
         el.readerSentence.textContent = "";
-        closeWordModal();
+        closeWordModal({ restoreFocus: false });
       }
       await loadTexts();
     };
@@ -541,7 +543,15 @@ function buildWordStateMap(tokens) {
   return out;
 }
 
-function openWordModal() {
+function isFocusableElement(node) {
+  return node instanceof HTMLElement && node.isConnected && !node.hasAttribute("disabled");
+}
+
+function openWordModal(triggerElement = null) {
+  if (isFocusableElement(triggerElement)) {
+    state.lastWordTriggerElement = triggerElement;
+  }
+  state.lastWordTriggerId = triggerElement?.dataset?.wordButtonId || "";
   state.isWordModalOpen = true;
   el.wordModal.classList.add("is-open");
   el.wordModal.setAttribute("aria-hidden", "false");
@@ -553,11 +563,24 @@ function openWordModal() {
   el.modalWordState.focus();
 }
 
-function closeWordModal() {
+function closeWordModal(options = {}) {
+  const { restoreFocus = true } = options;
   state.isWordModalOpen = false;
   el.wordModal.classList.remove("is-open");
   el.wordModal.setAttribute("aria-hidden", "true");
   el.wordModal.removeAttribute("data-busy");
+  if (restoreFocus) {
+    if (isFocusableElement(state.lastWordTriggerElement)) {
+      state.lastWordTriggerElement.focus();
+      return;
+    }
+    if (state.lastWordTriggerId) {
+      const replacement = el.readerSentence.querySelector(`[data-word-button-id="${state.lastWordTriggerId}"]`);
+      if (isFocusableElement(replacement)) {
+        replacement.focus();
+      }
+    }
+  }
 }
 
 function renderSentence(data) {
@@ -577,11 +600,12 @@ function renderSentence(data) {
   const wordStateByNormalized = buildWordStateMap(data.tokens);
   if (state.selectedWord && !wordStateByNormalized.has(state.selectedWord)) {
     state.selectedWord = "";
-    closeWordModal();
+    closeWordModal({ restoreFocus: false });
     el.meaningsWord.textContent = "Select a word";
   }
 
   el.readerSentence.innerHTML = "";
+  let clickableWordIndex = 0;
   const fragments = data.sentence_text.split(SENTENCE_SPLIT_RE);
   for (const fragment of fragments) {
     if (!fragment) {
@@ -608,6 +632,9 @@ function renderSentence(data) {
       btn.type = "button";
       btn.className = `sentence-word ${tokenState}`;
       btn.textContent = part;
+      const wordButtonId = `${normalized}:${clickableWordIndex}`;
+      clickableWordIndex += 1;
+      btn.dataset.wordButtonId = wordButtonId;
       btn.title = `Open details for ${part}`;
       btn.setAttribute("aria-label", `Open details for ${part}`);
       if (state.selectedWord === normalized) {
@@ -615,7 +642,7 @@ function renderSentence(data) {
       }
       btn.onclick = async () => {
         state.selectedWord = normalized;
-        openWordModal();
+        openWordModal(btn);
         renderSentence(state.currentSentence);
         await loadMeanings();
       };

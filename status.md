@@ -11,23 +11,21 @@ You are in a codex "ralph loop". Follow these steps, which you should never dele
 
 
 ## Progress This Run (2026-02-24)
-- Added a focused visual pass for reader and modal hierarchy: stronger reader panel emphasis, refined spacing/typography, and larger inline word tap targets.
-- Implemented modal micro-interactions for meaning create/delete flows via explicit busy states and deletion transition feedback.
-- Added staged entry animation for modal internals and improved mobile modal ergonomics with bottom-anchored presentation and larger controls.
-- Extended browser regression coverage to assert Escape-dismiss and backdrop-dismiss behavior for the word modal.
-- Fixed `scripts/capture_ui_screenshots.py` to the inline-word/modal UI and refreshed visual QA outputs (`03-reader-modal.png`, `04-reader-and-words.png`).
+- Added an accessibility-focused modal close/focus pass: tracked the triggering inline word button and restored keyboard focus to the correct word after close.
+- Hardened focus restore through sentence rerenders by storing a stable per-word trigger id, then resolving the replacement button on close.
+- Updated non-user-initiated close paths (view switch, user/text context clear, sentence/token invalidation) to close the modal without forcing hidden focus jumps.
+- Extended Playwright browser coverage to assert focus-return after Escape close, backdrop close, and explicit Close-button close.
 - Validation: `./.venv/bin/pytest -q` passed (`16 passed`).
 - Validation: `./.venv/bin/python scripts/capture_ui_screenshots.py` passed.
 
 ## Remaining Work
 - Manually review refreshed screenshots and trim/retire legacy `docs/visual-qa` artifacts no longer in the canonical set.
 - Perform real-device mobile QA (iOS Safari + Android Chrome) for modal keyboard behavior and sentence-word wrapping under narrow widths.
-- Decide whether to add an explicit focus-return target after modal close for stricter keyboard accessibility.
 - Re-check V1 checklist completion against `frontend-v1-spec.md` and `backend-v1-spec.md` before declaring project fully done.
 
 ## Next Goals
-- Do a focused accessibility pass (focus order, focus return after close, aria-live noise audit) and add tests for any fixes.
-- Refresh `docs/visual-qa.md` and screenshot inventory so only current artifacts are referenced.
+- Refresh `docs/visual-qa.md` and screenshot inventory so only canonical/current artifacts are referenced.
+- Run a manual cross-device UI QA pass and document any remaining polish bugs.
 - Execute one final end-to-end regression sweep and map results to remaining V1 checklist items.
 
 
