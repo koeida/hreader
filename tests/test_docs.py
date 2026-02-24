@@ -23,4 +23,5 @@ def test_visual_qa_doc_mentions_real_device_report_workflow() -> None:
     visual_qa = Path("docs/visual-qa.md").read_text(encoding="utf-8")
 
     assert "scripts/new_mobile_qa_report.py" in visual_qa
+    assert "scripts/finalize_v1_checklist.py" in visual_qa
     assert "docs/qa-reports/mobile-real-device-YYYYMMDD.md" in visual_qa

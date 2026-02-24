@@ -63,5 +63,11 @@ Checks:
 - Word modal controls remain fully visible without horizontal scrolling.
 
 After testing:
-- If both devices pass, mark Frontend checklist item 10 `Complete` in `docs/v1-checklist.md` and reference the report file.
+- If both devices pass, run:
+
+```bash
+.venv/bin/python scripts/finalize_v1_checklist.py --report docs/qa-reports/mobile-real-device-YYYYMMDD.md
+```
+
+This validates iOS/Android PASS rows plus overall PASS, then marks Frontend checklist item 10 `Complete` with a report reference.
 - If either device fails, keep item 10 `Pending` and record defects in the report.
