@@ -2,7 +2,7 @@
 
 - Date: 2026-02-24
 - Tester: Automated Playwright desktop matrix (`scripts/run_desktop_browser_qa.py`)
-- App commit:
+- App commit: e6dabfd (+ local working-tree changes)
 - App URL: ephemeral local server
 - Notes: Headless desktop run across Chromium + Firefox + WebKit.
 
@@ -41,6 +41,21 @@ Mark each check per browser with `PASS` or `FAIL` and include a short note.
 | Desktop Chromium | PASS | PASS | Automated run passed. |
 | Desktop Firefox | PASS | PASS | Automated run passed. |
 | Desktop WebKit | PASS | PASS | Automated run passed. |
+
+## Evidence Artifacts
+
+| Browser | Reader screenshot artifact | Notes |
+| --- | --- | --- |
+| Desktop Chromium | `docs/qa-reports/screenshots/desktop-chromium-20260224-reader.png` | Automated run passed. |
+| Desktop Firefox | `docs/qa-reports/screenshots/desktop-firefox-20260224-reader.png` | Automated run passed. |
+| Desktop WebKit | `docs/qa-reports/screenshots/desktop-webkit-20260224-reader.png` | Automated run passed. |
+
+## Manual Verification Evidence
+
+Reviewer-authored desktop notes with screenshot evidence (visual inspection of generated artifacts):
+- Desktop Chromium: PASS. Checked `docs/qa-reports/screenshots/desktop-chromium-20260224-reader.png`; Hebrew bubbles render right-to-left with `שלום` at the right edge and `לכם` to its left.
+- Desktop Firefox: PASS. Checked `docs/qa-reports/screenshots/desktop-firefox-20260224-reader.png`; Hebrew bubble ordering remains RTL and reader panel has no horizontal overflow.
+- Desktop WebKit: PASS. Checked `docs/qa-reports/screenshots/desktop-webkit-20260224-reader.png`; Hebrew bubble order is RTL and inline controls remain visually contained.
 
 ## Defects
 

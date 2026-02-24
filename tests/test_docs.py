@@ -36,4 +36,15 @@ def test_ui_beauty_spec_is_present_and_desktop_first() -> None:
     assert "desktop-first" in beauty_spec
     assert "Modern-Blue" in beauty_spec
     assert "Phase 1" in beauty_spec
+    assert "Phase 2" in beauty_spec
     assert "Chromium/Firefox/WebKit" in beauty_spec
+
+
+def test_latest_desktop_reports_include_manual_and_design_review_evidence() -> None:
+    desktop_report = Path("docs/qa-reports/desktop-browser-qa-20260224.md").read_text(encoding="utf-8")
+    design_review = Path("docs/qa-reports/ui-design-review-20260224.md").read_text(encoding="utf-8")
+
+    assert "Manual Verification Evidence" in desktop_report
+    assert "Reader screenshot artifact" in desktop_report
+    assert "Independent agent pass" in design_review
+    assert "Phase 2 Refinement Decisions" in design_review

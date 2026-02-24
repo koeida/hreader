@@ -26,10 +26,11 @@ Deliver a desktop-first UI that feels modern, clear, and premium while preservin
 
 ## Execution Plan
 1. Phase 1: Foundation restyle (palette, elevation, desktop grid shell, modern-blue controls).
-2. Phase 2: Visual QA refresh screenshots and verify desktop browser matrix still passes.
-3. Phase 3: Optional typography and spacing refinement after real-user feedback.
+2. Phase 2: Independent design review + refinement sweep (typography hierarchy, spacing rhythm, contrast, button/input polish).
+3. Phase 3: Visual QA refresh screenshots, verify desktop browser matrix still passes, and attach explicit manual reviewer notes.
 
 ## Completion Criteria
 - Phase 1 CSS/HTML shipped without regressions in frontend/browser tests.
+- Phase 2 refinement pass is reflected in shipped HTML/CSS and reviewed against this spec.
 - Visual QA screenshot set regenerated to reflect new design language.
-- Desktop browser QA report remains PASS for Chromium/Firefox/WebKit.
+- Desktop browser QA report remains PASS for Chromium/Firefox/WebKit and includes reviewer-authored manual evidence notes.

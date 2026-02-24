@@ -54,6 +54,7 @@ def test_frontend_uses_inline_controls_instead_of_prompts(tmp_path: Path) -> Non
     assert 'role="tablist"' in html.text
     assert 'role="tab"' in html.text
     assert "data-view-panel" in html.text
+    assert "shell-subtitle" in html.text
     assert "words?state=${state}&page=${page}&limit=${limit}" in js.text
     assert html.status_code == 200
     assert 'id="reader-state"' in html.text

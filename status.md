@@ -15,12 +15,7 @@ You are in a codex "ralph loop". Follow these steps, which you should never dele
 - No referencing v1 goals. Focus on work referenced in this status file.
 
 ## Remaining Work
-- Hebrew word-bubble ordering spec + implementation is in progress: `docs/hebrew-word-bubble-ordering-spec.md`.
-  - Completed in this loop: explicit RTL contract on reader sentence (`lang="he" dir="rtl"`), bidi styling fix, Playwright regression test for visual bubble order, and a fresh desktop-browser matrix report at `docs/qa-reports/desktop-browser-qa-20260224.md` (Chromium/Firefox/WebKit all PASS).
-  - Remaining to close this item: explicit manual (human) desktop verification notes with screenshots called out as manual evidence.
-- Create a spec for making the UI look beautiful and 2026 and hip and responsive and modern-blue. No mobile focus. Desktop only. Reference that spec here and work it to completion. Ideally spawn a separate Codex instance to evaluate whether the UI is beautiful enough.
-  - Completed in this loop: authored `docs/ui-beauty-spec.md` and shipped Phase 1 desktop modern-blue UI implementation.
-  - Remaining to close this item: independent visual review pass against the new spec and a Phase 2 refinement sweep.
+- None. Status-file scoped desktop UI and RTL ordering work is complete.
 
 ## Progress Update (2026-02-24)
 - Added Hebrew ordering spec: `docs/hebrew-word-bubble-ordering-spec.md`.
@@ -48,14 +43,31 @@ You are in a codex "ralph loop". Follow these steps, which you should never dele
   - `docs/visual-qa/04-reader-and-words.png`
 - Generated fresh desktop browser QA report:
   - `docs/qa-reports/desktop-browser-qa-20260224.md`
+- Added screenshot artifacts per browser in desktop QA automation:
+  - `scripts/run_desktop_browser_qa.py`
+  - `docs/qa-reports/screenshots/desktop-chromium-20260224-reader.png`
+  - `docs/qa-reports/screenshots/desktop-firefox-20260224-reader.png`
+  - `docs/qa-reports/screenshots/desktop-webkit-20260224-reader.png`
+- Added explicit manual reviewer notes for RTL bubble ordering evidence across Chromium/Firefox/WebKit:
+  - `docs/qa-reports/desktop-browser-qa-20260224.md`
+- Completed independent design review and documented Phase 2 decisions:
+  - `docs/qa-reports/ui-design-review-20260224.md`
+- Applied Phase 2 desktop polish (typography/spacing/contrast tuning):
+  - `app/static/index.html`
+  - `app/static/styles.css`
+- Updated beauty spec completion criteria for Phase 2 + manual evidence:
+  - `docs/ui-beauty-spec.md`
+- Added regression coverage for QA/manual evidence and design review docs:
+  - `tests/test_desktop_qa_script.py`
+  - `tests/test_docs.py`
+  - `tests/test_frontend.py`
 - Validation run:
-  - `.venv/bin/pytest -q tests/test_frontend.py tests/test_docs.py tests/test_visual_qa.py tests/test_ui_browser.py::test_reader_sentence_enforces_rtl_word_bubble_order` (PASS)
+  - `.venv/bin/pytest -q tests/test_frontend.py tests/test_docs.py tests/test_desktop_qa_script.py tests/test_ui_browser.py::test_reader_sentence_enforces_rtl_word_bubble_order` (PASS)
   - `make visual-qa` (PASS)
   - `.venv/bin/python scripts/run_desktop_browser_qa.py --date 2026-02-24 --force` (PASS)
 
 ## Next Goals
-1. Run and document explicit manual desktop QA notes/screenshots for Hebrew bubble ordering across Chromium/Firefox/WebKit (human-verified evidence).
-2. Run an independent design review against `docs/ui-beauty-spec.md` and apply Phase 2 polish updates (spacing, typography tuning, contrast passes).
+1. Optional: gather real-user desktop feedback and run a Phase 3 micro-tuning pass if needed.
 
 
 ## Autopilot done_code Contract
