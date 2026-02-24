@@ -140,6 +140,7 @@ const state = {
 };
 
 const el = {
+  appRoot: document.querySelector("[data-testid='app-root']"),
   apiBaseUrl: document.getElementById("api-base-url"),
   saveApiBase: document.getElementById("save-api-base"),
   checkHealth: document.getElementById("check-health"),
@@ -246,6 +247,10 @@ function setActiveView(viewName, persist = true) {
   const allowedViews = new Set(VIEW_ORDER);
   const nextView = allowedViews.has(viewName) ? viewName : "library";
   state.activeView = nextView;
+  if (el.appRoot) {
+    el.appRoot.classList.remove("view-library", "view-reader", "view-words");
+    el.appRoot.classList.add(`view-${nextView}`);
+  }
   if (persist) {
     localStorage.setItem("active_view", nextView);
   }
@@ -560,6 +565,7 @@ function openWordModal(triggerElement = null) {
   if (tokenState) {
     el.modalWordState.value = tokenState;
   }
+  el.meaningContext.value = state.currentSentence?.sentence_text || "";
   el.modalWordState.focus();
 }
 

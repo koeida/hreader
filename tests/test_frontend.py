@@ -49,6 +49,8 @@ def test_frontend_uses_inline_controls_instead_of_prompts(tmp_path: Path) -> Non
     assert "VIEW_ORDER" in js.text
     assert "aria-selected" in js.text
     assert "Open in Reader" in js.text
+    assert "el.meaningContext.value = state.currentSentence?.sentence_text || \"\";" in js.text
+    assert "view-reader" in js.text
     assert "Jump to Sentence" in html.text
     assert "Generate English Meaning" in html.text
     assert 'role="tablist"' in html.text
@@ -82,3 +84,14 @@ def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> N
     assert '!isCurrentRequest("words", requestVersion)' in js.text
     assert '!isCurrentRequest("sentence", requestVersion)' in js.text
     assert '!isCurrentRequest("meanings", requestVersion)' in js.text
+
+
+def test_frontend_styles_support_compact_header_and_wide_reader(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        css = client.get("/static/styles.css")
+
+    assert css.status_code == 200
+    assert ".app.view-reader" in css.text
+    assert 'width: min(1500px, calc(100vw - 6rem));' in css.text
+    assert "grid-template-columns: minmax(0, 1fr) auto auto;" in css.text
+    assert "font-size: clamp(2.15rem, 2.6vw, 2.75rem);" in css.text
