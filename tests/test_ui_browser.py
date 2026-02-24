@@ -225,6 +225,56 @@ def test_mobile_emulation_modal_tabs_and_wrapping(live_server: str) -> None:
         browser.close()
 
 
+def test_reader_sentence_enforces_rtl_word_bubble_order(live_server: str) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        context = browser.new_context(base_url=live_server)
+        page = context.new_page()
+        page.goto("/", wait_until="networkidle")
+
+        page.fill("#new-user-name", "RTL User")
+        page.click("#create-user-form button[type='submit']")
+        page.wait_for_selector("#users-list li")
+
+        page.fill("#new-text-title", "RTL Sentence")
+        page.fill("#new-text-content", "אָבָא אִמָא יֶלֶד.")
+        page.click("#create-text-form button[type='submit']")
+        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+        page.click("#texts-list li button:has-text('Open in Reader')")
+        page.wait_for_selector(".sentence-word")
+
+        rtl_contract = page.evaluate(
+            """
+            () => {
+              const sentence = document.getElementById('reader-sentence');
+              const style = window.getComputedStyle(sentence);
+              const buttons = Array.from(sentence.querySelectorAll('.sentence-word'));
+              if (buttons.length < 3) {
+                return { ok: false, reason: `expected 3+ word buttons, got ${buttons.length}` };
+              }
+              const centers = buttons.slice(0, 3).map((btn) => {
+                const rect = btn.getBoundingClientRect();
+                return rect.left + rect.width / 2;
+              });
+              return {
+                ok: style.direction === 'rtl' && centers[0] > centers[1] && centers[1] > centers[2],
+                reason: `direction=${style.direction}; centers=${centers.join(',')}`,
+              };
+            }
+            """
+        )
+        assert rtl_contract["ok"] is True, rtl_contract["reason"]
+
+        context.close()
+        browser.close()
+
+
 def test_mobile_webkit_emulation_modal_tabs_and_focus(live_server: str) -> None:
     playwright = pytest.importorskip("playwright.sync_api")
 

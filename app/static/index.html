@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hebrew Reading Helper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+Hebrew:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape"></div>
+    <main class="app" data-testid="app-root">
+      <header class="shell-header">
+        <h1>Hebrew Reading Helper</h1>
+        <nav class="view-nav" aria-label="Primary views" role="tablist">
+          <button
+            id="view-library"
+            class="view-btn"
+            type="button"
+            data-view-target="library"
+            role="tab"
+            aria-controls="panel-library"
+            title="Library view"
+          >
+            Library
+          </button>
+          <button
+            id="view-reader"
+            class="view-btn"
+            type="button"
+            data-view-target="reader"
+            role="tab"
+            aria-controls="panel-reader"
+            title="Reader view"
+          >
+            Reader
+          </button>
+          <button
+            id="view-words"
+            class="view-btn"
+            type="button"
+            data-view-target="words"
+            role="tab"
+            aria-controls="panel-words"
+            title="Words view"
+          >
+            Words
+          </button>
+        </nav>
+        <div class="api-controls">
+          <label>
+            API Base URL
+            <input id="api-base-url" type="url" placeholder="http://127.0.0.1:8000" />
+          </label>
+          <button id="save-api-base" type="button">Save</button>
+          <button id="check-health" type="button">Check API</button>
+          <span id="health-indicator" class="pill">Unknown</span>
+        </div>
+      </header>
+
+      <section id="panel-library-users" class="panel" data-view-panel="library">
+        <div class="panel-title-row">
+          <h2>Users</h2>
+          <div>
+            <label class="inline-label">
+              <input id="include-deleted" type="checkbox" />
+              Show deleted
+            </label>
+            <button id="refresh-users" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <form id="create-user-form" class="row-form">
+          <input id="new-user-name" required minlength="1" maxlength="100" placeholder="New user name" />
+          <button type="submit">Create User</button>
+        </form>
+
+        <label>
+          Active user
+          <select id="active-user"></select>
+        </label>
+        <div id="users-state" class="state" role="status" aria-live="polite"></div>
+        <ul id="users-list" class="list"></ul>
+      </section>
+
+      <section id="panel-library" class="panel" data-view-panel="library">
+        <div class="panel-title-row">
+          <h2>Texts</h2>
+          <button id="refresh-texts" type="button" title="Reload texts for the selected user">Refresh</button>
+        </div>
+        <form id="create-text-form" class="stack-form">
+          <input id="new-text-title" required minlength="1" maxlength="200" placeholder="Text title" />
+          <textarea
+            id="new-text-content"
+            required
+            minlength="1"
+            placeholder="Paste Hebrew text here. Sentences are split by periods."
+          ></textarea>
+          <button type="submit">Add Text</button>
+        </form>
+        <div id="texts-state" class="state" role="status" aria-live="polite"></div>
+        <ul id="texts-list" class="list"></ul>
+      </section>
+
+      <section id="panel-reader" class="panel" data-view-panel="reader">
+        <div class="panel-title-row">
+          <h2>Reader</h2>
+          <span id="reader-meta" class="pill">No text open</span>
+        </div>
+        <div class="reader-state-legend" aria-label="Word state legend">
+          <span class="legend-pill known">Known</span>
+          <span class="legend-pill unknown">Unknown</span>
+          <span class="legend-pill never_seen">Never seen</span>
+        </div>
+        <p id="reader-sentence" class="sentence" lang="he" dir="rtl"></p>
+        <div id="reader-state" class="state" role="status" aria-live="polite"></div>
+        <div class="nav-row">
+          <button id="prev-sentence" type="button" title="Go to previous sentence">Previous</button>
+          <button id="next-sentence" type="button" title="Go to next sentence">Next</button>
+        </div>
+        <form id="jump-sentence-form" class="row-form">
+          <input
+            id="jump-sentence-index"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Sentence index"
+            aria-label="Jump to sentence index"
+          />
+          <button id="jump-sentence-btn" type="submit">Jump to Sentence</button>
+        </form>
+      </section>
+
+      <section id="panel-words" class="panel" data-view-panel="words">
+        <div class="panel-title-row">
+          <h2>Words</h2>
+          <div>
+            <label>
+              Filter
+              <select id="words-filter">
+                <option value="all">All</option>
+                <option value="unknown">Unknown</option>
+                <option value="known">Known</option>
+                <option value="never_seen">Never Seen</option>
+              </select>
+            </label>
+            <label>
+              Limit
+              <select id="words-limit">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <button id="refresh-words" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="nav-row">
+          <button id="words-prev-page" type="button">Previous Page</button>
+          <span id="words-page-label" class="pill">Page 1</span>
+          <button id="words-next-page" type="button">Next Page</button>
+        </div>
+        <div id="words-state" class="state" role="status" aria-live="polite"></div>
+        <ul id="words-list" class="list"></ul>
+      </section>
+
+      <div id="word-modal" class="word-modal" aria-hidden="true">
+        <button
+          id="word-modal-backdrop"
+          class="word-modal__backdrop"
+          type="button"
+          tabindex="-1"
+          aria-label="Close word details"
+        ></button>
+        <section
+          id="word-modal-surface"
+          class="word-modal__surface"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="word-modal-title"
+        >
+          <div class="panel-title-row">
+            <h2 id="word-modal-title">Word Details</h2>
+            <span id="meanings-word" class="pill">No word selected</span>
+          </div>
+          <label>
+            Word state
+            <select id="modal-word-state" aria-label="Word state">
+              <option value="known">Known</option>
+              <option value="unknown">Unknown</option>
+              <option value="never_seen">Never seen</option>
+            </select>
+          </label>
+          <button id="close-word-modal" class="secondary" type="button">Close</button>
+          <form id="generate-meaning-form" class="stack-form">
+            <textarea id="meaning-context" placeholder="Optional sentence context"></textarea>
+            <button type="submit">Generate English Meaning</button>
+          </form>
+          <div id="meanings-state" class="state" role="status" aria-live="polite"></div>
+          <ul id="meanings-list" class="list"></ul>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

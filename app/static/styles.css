@@ -209,6 +209,9 @@ textarea:focus-visible {
   padding: 0.7rem;
   line-height: 1.9;
   margin: 0.7rem 0 0;
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: bidi-override;
 }
 
 .reader-state-legend {
@@ -246,6 +249,8 @@ textarea:focus-visible {
   padding: 0.17rem 0.36rem;
   min-height: 34px;
   transition: transform 140ms ease, box-shadow 180ms ease, filter 160ms ease;
+  direction: rtl;
+  unicode-bidi: isolate;
 }
 
 .sentence-word:hover {
