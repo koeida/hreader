@@ -50,6 +50,8 @@ def test_frontend_uses_inline_controls_instead_of_prompts(tmp_path: Path) -> Non
     assert "aria-selected" in js.text
     assert "Open in Reader" in js.text
     assert "el.meaningContext.value = state.currentSentence?.sentence_text || \"\";" in js.text
+    assert "positionWordModal(triggerElement)" in js.text
+    assert "if (state.isWordModalOpen && state.selectedWord === normalized)" in js.text
     assert "view-reader" in js.text
     assert "Jump to Sentence" in html.text
     assert "Generate English Meaning" in html.text
@@ -64,6 +66,8 @@ def test_frontend_uses_inline_controls_instead_of_prompts(tmp_path: Path) -> Non
     assert 'id="jump-sentence-form"' in html.text
     assert 'id="modal-word-state"' in html.text
     assert 'id="word-modal"' in html.text
+    assert 'id="word-modal-surface"' in html.text
+    assert 'tabindex="-1"' in html.text
     assert 'id="words-limit"' in html.text
     assert 'id="words-prev-page"' in html.text
     assert 'id="words-next-page"' in html.text
@@ -93,5 +97,8 @@ def test_frontend_styles_support_compact_header_and_wide_reader(tmp_path: Path) 
     assert css.status_code == 200
     assert ".app.view-reader" in css.text
     assert 'width: min(1500px, calc(100vw - 6rem));' in css.text
+    assert "z-index: 1000;" in css.text
+    assert "position: fixed;" in css.text
+    assert "width: min(680px, calc(100vw - 2rem));" in css.text
     assert "grid-template-columns: minmax(0, 1fr) auto auto;" in css.text
     assert "font-size: clamp(2.15rem, 2.6vw, 2.75rem);" in css.text

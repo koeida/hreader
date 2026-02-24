@@ -381,7 +381,7 @@ textarea:focus-visible {
 .word-modal {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 1000;
   pointer-events: none;
 }
 
@@ -400,11 +400,11 @@ textarea:focus-visible {
 }
 
 .word-modal__surface {
-  position: relative;
-  width: min(1500px, calc(100vw - 6rem));
-  max-height: calc(100vh - 2rem);
+  position: fixed;
+  width: min(680px, calc(100vw - 2rem));
+  max-height: calc(100vh - 1.5rem);
   overflow: auto;
-  margin: 1rem auto;
+  margin: 0;
   background: #fffffff5;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -543,14 +543,14 @@ textarea:focus-visible {
 
   .word-modal__surface {
     width: calc(100vw - 1rem);
-    margin: auto auto 0.5rem;
+    left: 0.5rem !important;
+    margin: 0;
     max-height: calc(100vh - 0.8rem);
     border-radius: 18px;
     padding: 0.85rem;
   }
 
   .word-modal {
-    display: grid;
-    align-items: end;
+    display: block;
   }
 }

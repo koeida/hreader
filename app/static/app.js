@@ -552,6 +552,41 @@ function isFocusableElement(node) {
   return node instanceof HTMLElement && node.isConnected && !node.hasAttribute("disabled");
 }
 
+function positionWordModal(triggerElement = null) {
+  const surface = el.wordModalSurface;
+  if (!surface) {
+    return;
+  }
+
+  const fallbackTop = Math.max(12, Math.round(window.innerHeight * 0.08));
+  const fallbackLeft = Math.max(12, Math.round((window.innerWidth - surface.offsetWidth) / 2));
+
+  if (!isFocusableElement(triggerElement)) {
+    surface.style.top = `${fallbackTop}px`;
+    surface.style.left = `${fallbackLeft}px`;
+    return;
+  }
+
+  const rect = triggerElement.getBoundingClientRect();
+  const spacing = 12;
+  const surfaceWidth = surface.offsetWidth || 560;
+  const surfaceHeight = surface.offsetHeight || 420;
+
+  let left = rect.left + rect.width / 2 - surfaceWidth / 2;
+  left = Math.max(spacing, Math.min(window.innerWidth - surfaceWidth - spacing, left));
+
+  let top = rect.bottom + spacing;
+  if (top + surfaceHeight + spacing > window.innerHeight) {
+    top = rect.top - surfaceHeight - spacing;
+  }
+  if (top < spacing) {
+    top = spacing;
+  }
+
+  surface.style.top = `${Math.round(top)}px`;
+  surface.style.left = `${Math.round(left)}px`;
+}
+
 function openWordModal(triggerElement = null) {
   if (isFocusableElement(triggerElement)) {
     state.lastWordTriggerElement = triggerElement;
@@ -566,7 +601,8 @@ function openWordModal(triggerElement = null) {
     el.modalWordState.value = tokenState;
   }
   el.meaningContext.value = state.currentSentence?.sentence_text || "";
-  el.modalWordState.focus();
+  positionWordModal(triggerElement);
+  el.wordModalSurface.focus();
 }
 
 function closeWordModal(options = {}) {
@@ -647,6 +683,9 @@ function renderSentence(data) {
         btn.classList.add("active");
       }
       btn.onclick = async () => {
+        if (state.isWordModalOpen && state.selectedWord === normalized) {
+          return;
+        }
         state.selectedWord = normalized;
         openWordModal(btn);
         renderSentence(state.currentSentence);
@@ -917,6 +956,24 @@ el.wordsNextPage.onclick = () => {
 el.wordModalBackdrop.onclick = () => closeWordModal();
 el.closeWordModal.onclick = () => closeWordModal();
 el.modalWordState.onchange = () => updateSelectedWordState(el.modalWordState.value);
+window.addEventListener("resize", () => {
+  if (!state.isWordModalOpen) {
+    return;
+  }
+  const trigger = state.lastWordTriggerId
+    ? el.readerSentence.querySelector(`[data-word-button-id="${state.lastWordTriggerId}"]`)
+    : null;
+  positionWordModal(trigger);
+});
+window.addEventListener("scroll", () => {
+  if (!state.isWordModalOpen) {
+    return;
+  }
+  const trigger = state.lastWordTriggerId
+    ? el.readerSentence.querySelector(`[data-word-button-id="${state.lastWordTriggerId}"]`)
+    : null;
+  positionWordModal(trigger);
+});
 el.wordModalSurface.onkeydown = (event) => {
   if (event.key === "Escape") {
     closeWordModal();
