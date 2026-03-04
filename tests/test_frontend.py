@@ -53,10 +53,19 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="word-mnemonic"' in html.text
     assert 'id="add-meaning-form"' in html.text
     assert 'id="meanings-preview"' in html.text
+    assert 'id="view-srs"' in html.text
+    assert 'id="panel-srs"' in html.text
+    assert 'id="srs-show"' in html.text
+    assert 'id="srs-wrong"' in html.text
+    assert 'id="srs-right"' in html.text
+    assert 'id="srs-mnemonic-input"' in html.text
 
     assert "onSentenceWordActivated" in js.text
     assert "cycleState" in js.text
     assert "clearWordDetailsPanel" in js.text
+    assert "loadSrsSession" in js.text
+    assert "submitSrsResult" in js.text
+    assert "srsReinsertWrongCard" in js.text
     assert "state.selectedWord !== word" in js.text
     assert "renderSentence();" in js.text
     assert "animateSelectionPulse" in js.text
@@ -77,6 +86,8 @@ def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> N
     assert '!isCurrentRequest("wordDetails", requestVersion)' in js.text
     assert "word !== state.selectedWord" in js.text
     assert "state.selectedWord !== actionWord" in js.text
+    assert "getTextPosition" in js.text
+    assert "updateTextPosition" in js.text
 
 
 def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: Path) -> None:
@@ -91,3 +102,5 @@ def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: 
     assert "@keyframes word-pulse" in css.text
     assert ".app.view-reader" in css.text
     assert 'width: min(1500px, calc(100vw - 6rem));' in css.text
+    assert ".app.view-srs" in css.text
+    assert ".srs-front-word" in css.text

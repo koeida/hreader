@@ -128,11 +128,15 @@ h3 {
   grid-area: words;
 }
 
+#panel-srs {
+  grid-area: srs;
+}
+
 .view-nav {
   display: flex;
   gap: 0.3rem;
   margin: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
 }
 
@@ -428,4 +432,83 @@ textarea:focus-visible {
 .app.view-reader #panel-reader {
   width: min(1500px, calc(100vw - 6rem));
   justify-self: center;
+}
+
+.app.view-srs {
+  min-width: 1200px;
+  grid-template-areas:
+    "header header header"
+    "srs srs srs";
+}
+
+.app.view-srs #panel-srs {
+  width: min(980px, calc(100vw - 6rem));
+  justify-self: center;
+}
+
+.srs-reviewer,
+.srs-add-new,
+.srs-caught-up {
+  margin-top: 0.7rem;
+}
+
+.srs-front-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: #fff;
+}
+
+.srs-front-word {
+  font-family: "Noto Sans Hebrew", sans-serif;
+  font-size: clamp(2rem, 2.8vw, 2.7rem);
+  text-align: right;
+  line-height: 1.4;
+}
+
+.srs-reveal {
+  margin-top: 0.6rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.srs-reveal.is-hidden {
+  display: none;
+}
+
+#srs-wrong {
+  background: linear-gradient(180deg, #d34040 0%, #b82121 100%);
+}
+
+#srs-right {
+  background: linear-gradient(180deg, #2fa154 0%, #1f7f40 100%);
+}
+
+.shell-subtitle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.backup-status {
+  display: inline-block;
+  font-size: 0.74rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.backup-status.ok {
+  color: var(--muted);
+}
+
+.backup-status.overdue,
+.backup-status.failed {
+  color: #a16d0e;
+  background: #fff5e6;
+  border: 1px solid #ffd699;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  opacity: 1;
 }

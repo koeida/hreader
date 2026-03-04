@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
+from app.db import get_connection, init_db
 from app.main import create_app
 from app.meanings import MeaningGenerationError
 
@@ -113,6 +115,33 @@ def test_text_crud_sentence_splitting_and_privacy(tmp_path: Path) -> None:
         assert deleted.status_code == 200
 
         after_delete = client.get(f"/v1/users/{user_a}/texts/{text_id}/sentences/0")
+        assert after_delete.status_code == 404
+
+
+def test_text_position_roundtrip_and_default(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        text_id = create_text(client, user_id, "T", "א. ב. ג.")
+
+        default_position = client.get(f"/v1/users/{user_id}/texts/{text_id}/position")
+        assert default_position.status_code == 200
+        assert default_position.json()["sentence_index"] == 0
+
+        updated = client.put(
+            f"/v1/users/{user_id}/texts/{text_id}/position",
+            json={"sentence_index": 2},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["sentence_index"] == 2
+
+        fetched = client.get(f"/v1/users/{user_id}/texts/{text_id}/position")
+        assert fetched.status_code == 200
+        assert fetched.json()["sentence_index"] == 2
+
+        deleted = client.delete(f"/v1/users/{user_id}/texts/{text_id}")
+        assert deleted.status_code == 200
+
+        after_delete = client.get(f"/v1/users/{user_id}/texts/{text_id}/position")
         assert after_delete.status_code == 404
 
 
@@ -409,3 +438,244 @@ def test_end_to_end_core_flow(tmp_path: Path) -> None:
 
         delete = client.delete(f"/v1/users/{user_id}/words/שלום/meanings/{gen.json()['meaning_id']}")
         assert delete.status_code == 200
+
+
+def test_srs_unknown_creates_card_new_and_excluded_from_due_until_added(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        up = client.put(f"/v1/users/{user_id}/words/shalom", json={"state": "unknown"})
+        assert up.status_code == 200
+
+        session = client.get(f"/v1/users/{user_id}/srs/session")
+        assert session.status_code == 200
+        data = session.json()
+        assert data["due_cards"] == []
+        assert data["available_new_count"] == 1
+        assert data["daily_new_remaining"] == 20
+
+
+def test_srs_daily_cap_20_and_reset_window_counting(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        for index in range(25):
+            word = f"word{index}"
+            up = client.put(f"/v1/users/{user_id}/words/{word}", json={"state": "unknown"})
+            assert up.status_code == 200
+
+        first_add = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 25, "timezone_offset_minutes": 0},
+        )
+        assert first_add.status_code == 200
+        data = first_add.json()
+        assert len(data["added_cards"]) == 20
+        assert data["daily_new_remaining"] == 0
+        assert data["available_new_count"] == 5
+
+        second_add = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 5, "timezone_offset_minutes": 0},
+        )
+        assert second_add.status_code == 200
+        data2 = second_add.json()
+        assert len(data2["added_cards"]) == 0
+        assert data2["daily_new_remaining"] == 0
+        assert data2["available_new_count"] == 5
+
+
+def test_srs_add_new_selects_oldest_new_cards(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        for word in ["alpha", "beta", "gamma"]:
+            up = client.put(f"/v1/users/{user_id}/words/{word}", json={"state": "unknown"})
+            assert up.status_code == 200
+
+        db_path = Path(client.app.state.db_path)
+        conn = get_connection(db_path)
+        try:
+            conn.execute(
+                "UPDATE srs_cards SET created_at = '2025-01-01T00:00:00Z' WHERE user_id = ? AND normalized_word = 'gamma'",
+                (user_id,),
+            )
+            conn.execute(
+                "UPDATE srs_cards SET created_at = '2025-01-02T00:00:00Z' WHERE user_id = ? AND normalized_word = 'beta'",
+                (user_id,),
+            )
+            conn.execute(
+                "UPDATE srs_cards SET created_at = '2025-01-03T00:00:00Z' WHERE user_id = ? AND normalized_word = 'alpha'",
+                (user_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        added = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 2, "timezone_offset_minutes": 0},
+        )
+        assert added.status_code == 200
+        added_words = {item["normalized_word"] for item in added.json()["added_cards"]}
+        assert added_words == {"gamma", "beta"}
+
+
+def test_srs_review_right_progression_plateau_and_wrong_reset(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        up = client.put(f"/v1/users/{user_id}/words/river", json={"state": "unknown"})
+        assert up.status_code == 200
+
+        add = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 1, "timezone_offset_minutes": 0},
+        )
+        assert add.status_code == 200
+        assert len(add.json()["added_cards"]) == 1
+
+        first_right = client.post(
+            f"/v1/users/{user_id}/srs/review",
+            json={"normalized_word": "river", "result": "right"},
+        )
+        assert first_right.status_code == 200
+        first_card = first_right.json()["card"]
+        first_due_at = datetime.fromisoformat(first_card["due_at"].replace("Z", "+00:00")).astimezone(UTC)
+        first_delta_days = (first_due_at - datetime.now(UTC)).total_seconds() / 86400
+        assert 0.95 <= first_delta_days <= 1.05
+        assert first_card["stage_index"] == 1
+
+        for expected_stage in [2, 3, 4, 5, 6, 7, 7]:
+            review = client.post(
+                f"/v1/users/{user_id}/srs/review",
+                json={"normalized_word": "river", "result": "right"},
+            )
+            assert review.status_code == 200
+            assert review.json()["card"]["stage_index"] == expected_stage
+
+        wrong = client.post(
+            f"/v1/users/{user_id}/srs/review",
+            json={"normalized_word": "river", "result": "wrong"},
+        )
+        assert wrong.status_code == 200
+        wrong_data = wrong.json()["card"]
+        assert wrong_data["stage_index"] == 0
+        due_at = datetime.fromisoformat(wrong_data["due_at"].replace("Z", "+00:00")).astimezone(UTC)
+        assert abs((datetime.now(UTC) - due_at).total_seconds()) < 5
+
+
+def test_srs_known_and_never_seen_remove_existing_card(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        create_unknown = client.put(f"/v1/users/{user_id}/words/light", json={"state": "unknown"})
+        assert create_unknown.status_code == 200
+
+        session_before = client.get(f"/v1/users/{user_id}/srs/session")
+        assert session_before.status_code == 200
+        assert session_before.json()["available_new_count"] == 1
+
+        known = client.put(f"/v1/users/{user_id}/words/light", json={"state": "known"})
+        assert known.status_code == 200
+        session_known = client.get(f"/v1/users/{user_id}/srs/session")
+        assert session_known.status_code == 200
+        assert session_known.json()["available_new_count"] == 0
+
+        recreate_unknown = client.put(f"/v1/users/{user_id}/words/light", json={"state": "unknown"})
+        assert recreate_unknown.status_code == 200
+        never = client.put(f"/v1/users/{user_id}/words/light", json={"state": "never_seen"})
+        assert never.status_code == 200
+        session_never = client.get(f"/v1/users/{user_id}/srs/session")
+        assert session_never.status_code == 200
+        assert session_never.json()["available_new_count"] == 0
+
+
+def test_srs_session_backfills_cards_for_existing_unknown_words(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+
+        unknown = client.put(f"/v1/users/{user_id}/words/legacyword", json={"state": "unknown"})
+        assert unknown.status_code == 200
+
+        db_path = Path(client.app.state.db_path)
+        conn = get_connection(db_path)
+        try:
+            conn.execute(
+                "DELETE FROM srs_cards WHERE user_id = ? AND normalized_word = 'legacyword'",
+                (user_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        session = client.get(f"/v1/users/{user_id}/srs/session")
+        assert session.status_code == 200
+        assert session.json()["available_new_count"] == 1
+
+        added = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 1, "timezone_offset_minutes": 0},
+        )
+        assert added.status_code == 200
+        assert {item["normalized_word"] for item in added.json()["added_cards"]} == {"legacyword"}
+
+
+def test_srs_card_payload_prefers_display_word_with_nikkud_when_available(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        text_id = create_text(client, user_id, "Nikkud Text", "בַּיִת שָׁלוֹם.")
+        load = client.get(f"/v1/users/{user_id}/texts/{text_id}/sentences/0")
+        assert load.status_code == 200
+
+        mark_unknown = client.put(f"/v1/users/{user_id}/words/בית", json={"state": "unknown"})
+        assert mark_unknown.status_code == 200
+
+        add = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 1, "timezone_offset_minutes": 0},
+        )
+        assert add.status_code == 200
+        card = add.json()["added_cards"][0]
+        assert card["normalized_word"] == "בית"
+        assert card["display_word"] == "בַּיִת"
+
+
+def test_backup_status_endpoint_exists(tmp_path):
+    """Backup status endpoint should exist and return valid data."""
+    db_path = tmp_path / "test.db"
+    
+    # Pre-create and init the database to avoid middleware issues
+    conn = get_connection(str(db_path))
+    init_db(conn)
+    conn.close()
+
+    client = make_client(tmp_path)
+
+    resp = client.get("/v1/backup/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "status" in data
+    assert "last_backup_date" in data
+    assert data["status"] in ("ok", "overdue", "failed")
+
+
+def test_backup_status_transitions_to_ok(tmp_path):
+    """After a successful backup, status should be ok."""
+    from datetime import date
+    from unittest.mock import patch
+
+    db_path = tmp_path / "test.db"
+    
+    # Pre-create and init the database
+    conn = get_connection(str(db_path))
+    init_db(conn)
+    conn.close()
+
+    client = make_client(tmp_path)
+
+    # Make a request to trigger backup middleware
+    resp = client.get("/health")
+    assert resp.status_code == 200
+
+    # Check status - should be ok now
+    status_resp = client.get("/v1/backup/status")
+    assert status_resp.status_code == 200
+    data = status_resp.json()
+    assert data["status"] == "ok"
+    assert data["last_backup_date"] == date.today().isoformat()

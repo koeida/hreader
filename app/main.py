@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
+import random
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.backup import BACKUP_DIR, prune_old_backups, run_backup
 from app.db import DEFAULT_DB_PATH, get_connection, init_db
 from app.meanings import MeaningGenerationError, MeaningGenerator, normalize_english_meaning_text
 from app.models import (
@@ -23,8 +25,16 @@ from app.models import (
     MeaningUpdateRequest,
     SentenceResponse,
     SentenceTokenResponse,
+    SrsCardResponse,
+    SrsReviewRequest,
+    SrsReviewResponse,
+    SrsSessionAddNewRequest,
+    SrsSessionAddNewResponse,
+    SrsSessionResponse,
     TextCreateRequest,
     TextListResponse,
+    TextPositionResponse,
+    TextPositionUpdateRequest,
     TextProgress,
     TextResponse,
     TextUpdateRequest,
@@ -38,11 +48,18 @@ from app.models import (
     WordStateUpdateRequest,
     WordsListResponse,
 )
-from app.tokenizer import normalize_token, tokenize_eligible
+from app.tokenizer import NIKKUD_RE, normalize_token, tokenize_eligible
+
+SRS_DAILY_NEW_CAP = 20
+SRS_INTERVAL_DAYS = [1, 2, 4, 7, 12, 21, 35, 56]
+
+
+def to_iso_utc(value: datetime) -> str:
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def utc_now_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return to_iso_utc(datetime.now(UTC))
 
 
 def split_sentences(content: str) -> list[str]:
@@ -78,6 +95,7 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
             unknown_count=0,
             never_seen_count=0,
             known_percent=0.0,
+            stage3_percent=0.0,
         )
 
     placeholders = ",".join("?" for _ in unique_words)
@@ -91,9 +109,21 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
     ).fetchall()
     state_map = {row["normalized_word"]: row["state"] for row in state_rows}
 
+    # Get SRS stage_index >= 3 for words not already known
+    stage3_rows = conn.execute(
+        f"""
+        SELECT normalized_word
+        FROM srs_cards
+        WHERE user_id = ? AND normalized_word IN ({placeholders}) AND stage_index >= 3
+        """,
+        (user_id, *sorted(unique_words)),
+    ).fetchall()
+    stage3_set = {row["normalized_word"] for row in stage3_rows}
+
     known = 0
     unknown = 0
     never_seen = 0
+    stage3 = 0
     for word in unique_words:
         state = state_map.get(word, "never_seen")
         if state == "known":
@@ -103,13 +133,19 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
         else:
             never_seen += 1
 
+        # Count stage 3+ separately (doesn't include known words)
+        if word in stage3_set and state != "known":
+            stage3 += 1
+
     total = len(unique_words)
     known_percent = round((known / total) * 100.0, 2) if total > 0 else 0.0
+    stage3_percent = round((stage3 / total) * 100.0, 2) if total > 0 else 0.0
     return TextProgress(
         known_count=known,
         unknown_count=unknown,
         never_seen_count=never_seen,
         known_percent=known_percent,
+        stage3_percent=stage3_percent,
     )
 
 
@@ -185,11 +221,167 @@ def row_to_word_details(row: Any, user_id: str, normalized_word: str) -> WordDet
     )
 
 
+def row_to_text_position(row: Any, user_id: str, text_id: str) -> TextPositionResponse:
+    if not row:
+        return TextPositionResponse(
+            user_id=user_id,
+            text_id=text_id,
+            sentence_index=0,
+            updated_at=None,
+        )
+    return TextPositionResponse(
+        user_id=row["user_id"],
+        text_id=row["text_id"],
+        sentence_index=row["sentence_index"],
+        updated_at=row["updated_at"],
+    )
+
+
 def normalize_meaning_text(value: str) -> str:
     normalized = " ".join(value.strip().split())
     if not normalized:
         raise HTTPException(status_code=400, detail="invalid_meaning_text")
     return normalized
+
+
+def srs_window_bounds(now_utc: datetime, timezone_offset_minutes: int) -> tuple[datetime, datetime]:
+    offset = timedelta(minutes=timezone_offset_minutes)
+    local_now = now_utc - offset
+    start_local = datetime.combine(local_now.date(), time(hour=3, minute=30), tzinfo=UTC)
+    if local_now.time() < time(hour=3, minute=30):
+        start_local -= timedelta(days=1)
+    window_start_utc = start_local + offset
+    window_end_utc = window_start_utc + timedelta(days=1)
+    return window_start_utc, window_end_utc
+
+
+def row_to_srs_card(row: Any) -> SrsCardResponse:
+    return row_to_srs_card_with_display(row, row["normalized_word"])
+
+
+def row_to_srs_card_with_display(row: Any, display_word: str) -> SrsCardResponse:
+    return SrsCardResponse(
+        user_id=row["user_id"],
+        normalized_word=row["normalized_word"],
+        display_word=display_word,
+        is_new=bool(row["is_new"]),
+        is_introduced=bool(row["is_introduced"]),
+        stage_index=row["stage_index"],
+        due_at=row["due_at"],
+        introduced_at=row["introduced_at"],
+        last_reviewed_at=row["last_reviewed_at"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def resolve_srs_display_words(conn: Any, user_id: str, normalized_words: list[str]) -> dict[str, str]:
+    targets = {word for word in normalized_words if word}
+    if not targets:
+        return {}
+
+    display_map: dict[str, str] = {}
+    has_nikkud_map: dict[str, bool] = {}
+    rows = conn.execute(
+        """
+        SELECT ts.sentence_text
+        FROM text_sentences ts
+        JOIN texts t ON t.text_id = ts.text_id
+        WHERE t.user_id = ?
+        ORDER BY t.created_at ASC, ts.sentence_index ASC
+        """,
+        (user_id,),
+    ).fetchall()
+
+    for row in rows:
+        if len(display_map) == len(targets) and all(has_nikkud_map.get(w, False) for w in targets):
+            break
+        sentence_text = row["sentence_text"]
+        for token in tokenize_eligible(sentence_text):
+            normalized = token.normalized_word
+            if normalized not in targets:
+                continue
+            token_text = token.token
+            token_has_nikkud = bool(NIKKUD_RE.search(token_text))
+            if normalized not in display_map:
+                display_map[normalized] = token_text
+                has_nikkud_map[normalized] = token_has_nikkud
+                continue
+            if token_has_nikkud and not has_nikkud_map.get(normalized, False):
+                display_map[normalized] = token_text
+                has_nikkud_map[normalized] = True
+
+    return {word: display_map.get(word, word) for word in normalized_words}
+
+
+def get_daily_new_count(conn: Any, user_id: str, window_start_at: str) -> int:
+    row = conn.execute(
+        """
+        SELECT new_count
+        FROM srs_daily_new_counts
+        WHERE user_id = ? AND window_start_at = ?
+        """,
+        (user_id, window_start_at),
+    ).fetchone()
+    return int(row["new_count"]) if row else 0
+
+
+def increment_daily_new_count(conn: Any, user_id: str, window_start_at: str, count: int) -> None:
+    conn.execute(
+        """
+        INSERT INTO srs_daily_new_counts (user_id, window_start_at, new_count)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, window_start_at)
+        DO UPDATE SET new_count = new_count + excluded.new_count
+        """,
+        (user_id, window_start_at, count),
+    )
+
+
+def ensure_srs_cards_for_unknown_words(conn: Any, user_id: str) -> None:
+    now = utc_now_iso()
+    conn.execute(
+        """
+        INSERT INTO srs_cards (
+            user_id, normalized_word, is_new, is_introduced, stage_index, due_at,
+            introduced_at, last_reviewed_at, created_at, updated_at
+        )
+        SELECT uw.user_id, uw.normalized_word, 1, 0, 0, ?, NULL, NULL, ?, ?
+        FROM user_words uw
+        LEFT JOIN srs_cards sc
+          ON sc.user_id = uw.user_id AND sc.normalized_word = uw.normalized_word
+        WHERE uw.user_id = ? AND uw.state = 'unknown' AND sc.normalized_word IS NULL
+        """,
+        (now, now, now, user_id),
+    )
+    conn.commit()
+
+
+def _sync_srs_card(conn: Any, user_id: str, normalized: str, state: str, now: str) -> None:
+    if state == "unknown":
+        conn.execute(
+            """
+            INSERT INTO srs_cards (
+                user_id, normalized_word, is_new, is_introduced, stage_index, due_at,
+                introduced_at, last_reviewed_at, created_at, updated_at
+            )
+            VALUES (?, ?, 1, 0, 0, ?, NULL, NULL, ?, ?)
+            ON CONFLICT(user_id, normalized_word)
+            DO UPDATE SET
+                is_new = 1,
+                is_introduced = 0,
+                stage_index = 0,
+                due_at = excluded.due_at,
+                introduced_at = NULL,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, normalized, now, now, now),
+        )
+    else:
+        conn.execute(
+            "DELETE FROM srs_cards WHERE user_id = ? AND normalized_word = ?",
+            (user_id, normalized),
+        )
 
 
 def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | None = None) -> FastAPI:
@@ -206,6 +398,8 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     app.state.db_path = db_path
     app.state.meaning_generator = meaning_generator or MeaningGenerator()
     app.state.static_dir = Path(__file__).resolve().parent / "static"
+    app.state.backup_last_date = None
+    app.state.backup_failed = False
 
     if app.state.static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(app.state.static_dir)), name="static")
@@ -236,9 +430,43 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             content={"error": {"code": "validation_error", "message": str(exc.errors())}},
         )
 
+    @app.middleware("http")
+    async def backup_middleware(request: Request, call_next: Any) -> Any:
+        """Run backup once per day on the first request after midnight."""
+        today = date.today()
+        if app.state.backup_last_date != today:
+            db_path = Path(app.state.db_path)
+            if db_path.exists():
+                try:
+                    run_backup(db_path)
+                    prune_old_backups(BACKUP_DIR, keep=7)
+                    app.state.backup_last_date = today
+                    app.state.backup_failed = False
+                except Exception:
+                    app.state.backup_last_date = today
+                    app.state.backup_failed = True
+        return await call_next(request)
+
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="ok")
+
+    @app.get("/v1/backup/status")
+    def backup_status() -> dict[str, Any]:
+        """Get the current backup status."""
+        today = date.today()
+
+        if app.state.backup_last_date is None or app.state.backup_last_date < today:
+            status = "overdue"
+        elif app.state.backup_failed:
+            status = "failed"
+        else:
+            status = "ok"
+
+        return {
+            "last_backup_date": app.state.backup_last_date.isoformat() if app.state.backup_last_date else None,
+            "status": status,
+        }
 
     @app.post("/v1/users", response_model=UserResponse)
     def create_user(payload: UserCreateRequest, conn: Any = Depends(get_conn)) -> UserResponse:
@@ -347,6 +575,54 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             updated_at=row["updated_at"],
             progress=parse_progress(conn, user_id, text_id),
         )
+
+    @app.get("/v1/users/{user_id}/texts/{text_id}/position", response_model=TextPositionResponse)
+    def get_text_position(user_id: str, text_id: str, conn: Any = Depends(get_conn)) -> TextPositionResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        text_id = ensure_uuid(text_id, "text_id")
+        ensure_active_user(conn, user_id)
+        ensure_user_text(conn, user_id, text_id)
+        row = conn.execute(
+            """
+            SELECT user_id, text_id, sentence_index, updated_at
+            FROM user_text_positions
+            WHERE user_id = ? AND text_id = ?
+            """,
+            (user_id, text_id),
+        ).fetchone()
+        return row_to_text_position(row, user_id, text_id)
+
+    @app.put("/v1/users/{user_id}/texts/{text_id}/position", response_model=TextPositionResponse)
+    def update_text_position(
+        user_id: str,
+        text_id: str,
+        payload: TextPositionUpdateRequest,
+        conn: Any = Depends(get_conn),
+    ) -> TextPositionResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        text_id = ensure_uuid(text_id, "text_id")
+        ensure_active_user(conn, user_id)
+        ensure_user_text(conn, user_id, text_id)
+        now = utc_now_iso()
+        conn.execute(
+            """
+            INSERT INTO user_text_positions (user_id, text_id, sentence_index, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, text_id)
+            DO UPDATE SET sentence_index = excluded.sentence_index, updated_at = excluded.updated_at
+            """,
+            (user_id, text_id, payload.sentence_index, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT user_id, text_id, sentence_index, updated_at
+            FROM user_text_positions
+            WHERE user_id = ? AND text_id = ?
+            """,
+            (user_id, text_id),
+        ).fetchone()
+        return row_to_text_position(row, user_id, text_id)
 
     @app.patch("/v1/users/{user_id}/texts/{text_id}", response_model=TextResponse)
     def rename_text(user_id: str, text_id: str, payload: TextUpdateRequest, conn: Any = Depends(get_conn)) -> TextResponse:
@@ -471,6 +747,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 "INSERT INTO user_words (user_id, normalized_word, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
                 (user_id, normalized, payload.state, now, now),
             )
+            _sync_srs_card(conn, user_id, normalized, payload.state, now)
             conn.commit()
             row = conn.execute(
                 "SELECT * FROM user_words WHERE user_id = ? AND normalized_word = ?",
@@ -484,6 +761,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 "UPDATE user_words SET state = ?, updated_at = ? WHERE user_id = ? AND normalized_word = ?",
                 (payload.state, now, user_id, normalized),
             )
+            _sync_srs_card(conn, user_id, normalized, payload.state, now)
             conn.commit()
             existing = conn.execute(
                 "SELECT * FROM user_words WHERE user_id = ? AND normalized_word = ?",
@@ -535,6 +813,194 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             total=total,
             items=[row_to_word(row) for row in rows],
         )
+
+    @app.get("/v1/users/{user_id}/srs/session", response_model=SrsSessionResponse)
+    def get_srs_session(
+        user_id: str,
+        timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
+        conn: Any = Depends(get_conn),
+    ) -> SrsSessionResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        ensure_srs_cards_for_unknown_words(conn, user_id)
+
+        now = datetime.now(UTC)
+        now_iso = to_iso_utc(now)
+        due_rows = conn.execute(
+            """
+            SELECT *
+            FROM srs_cards
+            WHERE user_id = ? AND is_introduced = 1 AND due_at <= ?
+            """,
+            (user_id, now_iso),
+        ).fetchall()
+        due_word_order = [row["normalized_word"] for row in due_rows]
+        due_display_words = resolve_srs_display_words(conn, user_id, due_word_order)
+        due_cards = [
+            row_to_srs_card_with_display(row, due_display_words.get(row["normalized_word"], row["normalized_word"]))
+            for row in due_rows
+        ]
+        random.shuffle(due_cards)
+
+        available_new_count = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM srs_cards
+            WHERE user_id = ? AND is_new = 1 AND is_introduced = 0
+            """,
+            (user_id,),
+        ).fetchone()["total"]
+        window_start_utc, window_end_utc = srs_window_bounds(now, timezone_offset_minutes)
+        used = get_daily_new_count(conn, user_id, to_iso_utc(window_start_utc))
+        daily_new_remaining = max(0, SRS_DAILY_NEW_CAP - used)
+        return SrsSessionResponse(
+            due_cards=due_cards,
+            daily_new_remaining=daily_new_remaining,
+            available_new_count=available_new_count,
+            daily_reset_at=to_iso_utc(window_end_utc),
+        )
+
+    @app.post("/v1/users/{user_id}/srs/session/add-new", response_model=SrsSessionAddNewResponse)
+    def add_srs_new_cards(
+        user_id: str,
+        payload: SrsSessionAddNewRequest,
+        conn: Any = Depends(get_conn),
+    ) -> SrsSessionAddNewResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        ensure_srs_cards_for_unknown_words(conn, user_id)
+
+        now = datetime.now(UTC)
+        now_iso = to_iso_utc(now)
+        window_start_utc, window_end_utc = srs_window_bounds(now, payload.timezone_offset_minutes)
+        window_start_iso = to_iso_utc(window_start_utc)
+        used = get_daily_new_count(conn, user_id, window_start_iso)
+        cap_remaining = max(0, SRS_DAILY_NEW_CAP - used)
+        target = min(payload.count, cap_remaining)
+
+        selected_rows: list[Any] = []
+        if target > 0:
+            selected_rows = conn.execute(
+                """
+                SELECT *
+                FROM srs_cards
+                WHERE user_id = ? AND is_new = 1 AND is_introduced = 0
+                ORDER BY created_at ASC, normalized_word ASC
+                LIMIT ?
+                """,
+                (user_id, target),
+            ).fetchall()
+
+        selected_words = [row["normalized_word"] for row in selected_rows]
+        if selected_words:
+            placeholders = ",".join("?" for _ in selected_words)
+            conn.execute(
+                f"""
+                UPDATE srs_cards
+                SET is_new = 0, is_introduced = 1, introduced_at = ?, updated_at = ?
+                WHERE user_id = ? AND normalized_word IN ({placeholders})
+                """,
+                (now_iso, now_iso, user_id, *selected_words),
+            )
+            increment_daily_new_count(conn, user_id, window_start_iso, len(selected_words))
+            conn.commit()
+            updated_rows = conn.execute(
+                f"""
+                SELECT *
+                FROM srs_cards
+                WHERE user_id = ? AND normalized_word IN ({placeholders})
+                """,
+                (user_id, *selected_words),
+            ).fetchall()
+            added_word_order = [row["normalized_word"] for row in updated_rows]
+            added_display_words = resolve_srs_display_words(conn, user_id, added_word_order)
+            added_cards = [
+                row_to_srs_card_with_display(row, added_display_words.get(row["normalized_word"], row["normalized_word"]))
+                for row in updated_rows
+            ]
+        else:
+            added_cards = []
+
+        random.shuffle(added_cards)
+        daily_new_remaining = max(0, SRS_DAILY_NEW_CAP - used - len(added_cards))
+        available_new_count = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM srs_cards
+            WHERE user_id = ? AND is_new = 1 AND is_introduced = 0
+            """,
+            (user_id,),
+        ).fetchone()["total"]
+
+        return SrsSessionAddNewResponse(
+            added_cards=added_cards,
+            daily_new_remaining=daily_new_remaining,
+            available_new_count=available_new_count,
+            daily_reset_at=to_iso_utc(window_end_utc),
+        )
+
+    @app.post("/v1/users/{user_id}/srs/review", response_model=SrsReviewResponse)
+    def review_srs_card(
+        user_id: str,
+        payload: SrsReviewRequest,
+        conn: Any = Depends(get_conn),
+    ) -> SrsReviewResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        normalized = normalize_token(payload.normalized_word)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM srs_cards
+            WHERE user_id = ? AND normalized_word = ?
+            """,
+            (user_id, normalized),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="srs_card_not_found")
+
+        now = datetime.now(UTC)
+        now_iso = to_iso_utc(now)
+        if payload.result == "right":
+            current_stage = int(row["stage_index"])
+            next_stage = min(current_stage + 1, 7)
+            if current_stage >= 7:
+                interval_days = SRS_INTERVAL_DAYS[7]
+            else:
+                interval_days = SRS_INTERVAL_DAYS[current_stage]
+            next_due = now + timedelta(days=interval_days)
+            conn.execute(
+                """
+                UPDATE srs_cards
+                SET stage_index = ?, due_at = ?, last_reviewed_at = ?, updated_at = ?, is_introduced = 1, is_new = 0
+                WHERE user_id = ? AND normalized_word = ?
+                """,
+                (next_stage, to_iso_utc(next_due), now_iso, now_iso, user_id, normalized),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE srs_cards
+                SET stage_index = 0, due_at = ?, last_reviewed_at = ?, updated_at = ?, is_introduced = 1, is_new = 0
+                WHERE user_id = ? AND normalized_word = ?
+                """,
+                (now_iso, now_iso, now_iso, user_id, normalized),
+            )
+        conn.commit()
+
+        updated = conn.execute(
+            """
+            SELECT *
+            FROM srs_cards
+            WHERE user_id = ? AND normalized_word = ?
+            """,
+            (user_id, normalized),
+        ).fetchone()
+        display_word = resolve_srs_display_words(conn, user_id, [normalized]).get(normalized, normalized)
+        return SrsReviewResponse(card=row_to_srs_card_with_display(updated, display_word))
 
     @app.get("/v1/users/{user_id}/texts/{text_id}/progress", response_model=TextProgress)
     def text_progress(user_id: str, text_id: str, conn: Any = Depends(get_conn)) -> TextProgress:

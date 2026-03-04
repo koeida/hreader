@@ -71,6 +71,14 @@ for _ in $(seq 1 100); do
     echo "Server started (pid $NEW_PID)."
     echo "Navigate to: $BASE_URL/"
     echo "Log file: $LOG_FILE"
+
+    # Open in default browser if available
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$BASE_URL/" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then
+      open "$BASE_URL/" >/dev/null 2>&1 &
+    fi
+
     exit 0
   fi
   if ! kill -0 "$NEW_PID" 2>/dev/null; then

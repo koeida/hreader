@@ -19,7 +19,10 @@
         <div class="shell-title">
           <p class="eyebrow">Desktop Reading Studio</p>
           <h1>Hebrew Reading Helper</h1>
-          <p class="shell-subtitle">Desktop Hebrew reading workspace.</p>
+          <div class="shell-subtitle-row">
+            <p class="shell-subtitle">Desktop Hebrew reading workspace.</p>
+            <span id="backup-status" class="backup-status"></span>
+          </div>
         </div>
         <nav class="view-nav" aria-label="Primary views" role="tablist">
           <button
@@ -54,6 +57,17 @@
             title="Words view"
           >
             Words
+          </button>
+          <button
+            id="view-srs"
+            class="view-btn"
+            type="button"
+            data-view-target="srs"
+            role="tab"
+            aria-controls="panel-srs"
+            title="SRS view"
+          >
+            SRS
           </button>
         </nav>
       </header>
@@ -180,6 +194,54 @@
         </div>
         <div id="words-state" class="state" role="status" aria-live="polite"></div>
         <ul id="words-list" class="list"></ul>
+      </section>
+
+      <section id="panel-srs" class="panel" data-view-panel="srs">
+        <div class="panel-title-row">
+          <h2>SRS</h2>
+          <span id="srs-meta" class="pill">No session loaded</span>
+        </div>
+        <div id="srs-state" class="state" role="status" aria-live="polite"></div>
+
+        <div id="srs-reviewer" class="srs-reviewer is-hidden">
+          <div class="srs-front-wrap">
+            <div id="srs-front-word" class="srs-front-word" lang="he" dir="rtl"></div>
+          </div>
+
+          <div id="srs-reveal" class="srs-reveal is-hidden">
+            <div>
+              <h3>Definitions</h3>
+              <ul id="srs-definitions" class="list"></ul>
+            </div>
+            <div>
+              <h3>Mnemonic</h3>
+              <div id="srs-mnemonic-view" class="state"></div>
+              <form id="srs-mnemonic-form" class="row-form is-hidden">
+                <textarea id="srs-mnemonic-input" placeholder="Add a mnemonic for this word"></textarea>
+                <button id="srs-mnemonic-save" type="submit">Save Mnemonic</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="nav-row">
+            <button id="srs-show" type="button">Show</button>
+            <button id="srs-wrong" type="button">Wrong (0)</button>
+            <button id="srs-right" type="button">Right (1)</button>
+          </div>
+        </div>
+
+        <div id="srs-add-new" class="srs-add-new is-hidden">
+          <p>Add new cards to review.</p>
+          <form id="srs-add-new-form" class="row-form">
+            <input id="srs-add-count" type="number" min="1" max="20" value="10" />
+            <button id="srs-add-submit" type="submit">Add New Cards</button>
+          </form>
+        </div>
+
+        <div id="srs-caught-up" class="srs-caught-up is-hidden">
+          <p>All caught up.</p>
+          <a href="#" id="srs-stats-link">Open stats (coming soon)</a>
+        </div>
       </section>
     </main>
     <script type="module" src="/static/app.js"></script>

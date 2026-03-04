@@ -264,3 +264,45 @@ def test_duplicate_words_cycle_updates_all_occurrences(live_server: str) -> None
 
         context.close()
         browser.close()
+
+
+def test_reader_reopens_text_at_last_persisted_sentence_after_reload(live_server: str) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        context = browser.new_context(base_url=live_server)
+        page = context.new_page()
+        page.goto("/", wait_until="networkidle")
+
+        page.fill("#new-user-name", "Resume User")
+        page.click("#create-user-form button[type='submit']")
+        page.wait_for_selector("#users-list li")
+
+        content = " ".join([f"מִשְׁפָּט{i}." for i in range(1, 41)])
+        page.fill("#new-text-title", "Resume Story")
+        page.fill("#new-text-content", content)
+        page.click("#create-text-form button[type='submit']")
+        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+
+        page.click("#texts-list li button:has-text('Open in Reader')")
+        for _ in range(31):
+            page.click("#next-sentence")
+        page.wait_for_function(
+            "() => document.getElementById('reader-meta').textContent.includes('sentence 31')"
+        )
+
+        page.click("#view-library")
+        page.reload(wait_until="networkidle")
+        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+        page.click("#texts-list li button:has-text('Open in Reader')")
+        page.wait_for_function(
+            "() => document.getElementById('reader-meta').textContent.includes('sentence 31')"
+        )
+
+        context.close()
+        browser.close()

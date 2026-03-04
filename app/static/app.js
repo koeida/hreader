@@ -76,6 +76,17 @@ class ApiClient {
     return this.request(`/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}`, { method: "GET" });
   }
 
+  getTextPosition(userId, textId) {
+    return this.request(`/v1/users/${userId}/texts/${textId}/position`, { method: "GET" });
+  }
+
+  updateTextPosition(userId, textId, sentenceIndex) {
+    return this.request(`/v1/users/${userId}/texts/${textId}/position`, {
+      method: "PUT",
+      body: JSON.stringify({ sentence_index: sentenceIndex }),
+    });
+  }
+
   updateWordState(userId, normalizedWord, state) {
     return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}`, {
       method: "PUT",
@@ -134,6 +145,31 @@ class ApiClient {
       body: JSON.stringify({ mnemonic }),
     });
   }
+
+  getSrsSession(userId, timezoneOffsetMinutes) {
+    return this.request(
+      `/v1/users/${userId}/srs/session?timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}`,
+      { method: "GET" }
+    );
+  }
+
+  addSrsNewCards(userId, count, timezoneOffsetMinutes) {
+    return this.request(`/v1/users/${userId}/srs/session/add-new`, {
+      method: "POST",
+      body: JSON.stringify({ count, timezone_offset_minutes: timezoneOffsetMinutes }),
+    });
+  }
+
+  submitSrsReview(userId, normalizedWord, result) {
+    return this.request(`/v1/users/${userId}/srs/review`, {
+      method: "POST",
+      body: JSON.stringify({ normalized_word: normalizedWord, result }),
+    });
+  }
+
+  getBackupStatus() {
+    return this.request("/v1/backup/status", { method: "GET" });
+  }
 }
 
 const state = {
@@ -150,6 +186,15 @@ const state = {
   wordsPage: 1,
   wordsLimit: 50,
   activeView: localStorage.getItem("active_view") || "library",
+  srsDueQueue: [],
+  srsCurrentCard: null,
+  srsRevealed: false,
+  srsDefinitions: [],
+  srsMnemonic: null,
+  srsLoadingDetailsForWord: "",
+  srsDailyNewRemaining: 0,
+  srsAvailableNewCount: 0,
+  srsDailyResetAt: "",
   requestVersion: {
     users: 0,
     texts: 0,
@@ -158,6 +203,9 @@ const state = {
     meanings: 0,
     wordDetails: 0,
     wordSave: 0,
+    srsSession: 0,
+    srsDetails: 0,
+    srsReview: 0,
   },
 };
 
@@ -205,8 +253,28 @@ const el = {
   wordsList: document.getElementById("words-list"),
   viewButtons: Array.from(document.querySelectorAll("[data-view-target]")),
   viewPanels: Array.from(document.querySelectorAll("[data-view-panel]")),
+  srsMeta: document.getElementById("srs-meta"),
+  srsState: document.getElementById("srs-state"),
+  srsReviewer: document.getElementById("srs-reviewer"),
+  srsFrontWord: document.getElementById("srs-front-word"),
+  srsReveal: document.getElementById("srs-reveal"),
+  srsDefinitions: document.getElementById("srs-definitions"),
+  srsMnemonicView: document.getElementById("srs-mnemonic-view"),
+  srsMnemonicForm: document.getElementById("srs-mnemonic-form"),
+  srsMnemonicInput: document.getElementById("srs-mnemonic-input"),
+  srsMnemonicSave: document.getElementById("srs-mnemonic-save"),
+  srsShow: document.getElementById("srs-show"),
+  srsWrong: document.getElementById("srs-wrong"),
+  srsRight: document.getElementById("srs-right"),
+  srsAddNew: document.getElementById("srs-add-new"),
+  srsAddNewForm: document.getElementById("srs-add-new-form"),
+  srsAddCount: document.getElementById("srs-add-count"),
+  srsAddSubmit: document.getElementById("srs-add-submit"),
+  srsCaughtUp: document.getElementById("srs-caught-up"),
+  srsStatsLink: document.getElementById("srs-stats-link"),
+  backupStatus: document.getElementById("backup-status"),
 };
-const VIEW_ORDER = ["library", "reader", "words"];
+const VIEW_ORDER = ["library", "reader", "words", "srs"];
 
 function nextRequestVersion(key) {
   state.requestVersion[key] += 1;
@@ -282,7 +350,7 @@ function setActiveView(viewName, persist = true) {
   const nextView = allowedViews.has(viewName) ? viewName : "library";
   state.activeView = nextView;
   if (el.appRoot) {
-    el.appRoot.classList.remove("view-library", "view-reader", "view-words");
+    el.appRoot.classList.remove("view-library", "view-reader", "view-words", "view-srs");
     el.appRoot.classList.add(`view-${nextView}`);
   }
   if (persist) {
@@ -302,6 +370,9 @@ function setActiveView(viewName, persist = true) {
   if (nextView !== "reader") {
     clearWordDetailsPanel();
     renderSentence();
+  }
+  if (nextView === "srs" && state.activeUserId) {
+    void loadSrsSession();
   }
 }
 
@@ -390,6 +461,198 @@ function clearUserScopedViews() {
   el.wordsPrevPage.disabled = true;
   el.wordsNextPage.disabled = true;
   clearWordDetailsPanel();
+  clearSrsState();
+}
+
+function clearSrsState() {
+  state.srsDueQueue = [];
+  state.srsCurrentCard = null;
+  state.srsRevealed = false;
+  state.srsDefinitions = [];
+  state.srsMnemonic = null;
+  state.srsLoadingDetailsForWord = "";
+  state.srsDailyNewRemaining = 0;
+  state.srsAvailableNewCount = 0;
+  state.srsDailyResetAt = "";
+  el.srsMeta.textContent = "No session loaded";
+  setStateMessage(el.srsState, "");
+  renderSrs();
+}
+
+function timezoneOffsetMinutes() {
+  return new Date().getTimezoneOffset();
+}
+
+function srsReinsertWrongCard(card) {
+  if (!card) return;
+  if (state.srsDueQueue.length >= 2) {
+    state.srsDueQueue.splice(2, 0, card);
+    return;
+  }
+  state.srsDueQueue.push(card);
+}
+
+function renderSrsDefinitions() {
+  el.srsDefinitions.innerHTML = "";
+  if (state.srsDefinitions.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty-row";
+    li.textContent = "No definitions yet";
+    el.srsDefinitions.appendChild(li);
+    return;
+  }
+  for (const item of state.srsDefinitions) {
+    const li = document.createElement("li");
+    li.textContent = item.meaning_text;
+    el.srsDefinitions.appendChild(li);
+  }
+}
+
+function renderSrsMnemonic() {
+  const hasMnemonic = Boolean((state.srsMnemonic || "").trim());
+  if (hasMnemonic) {
+    el.srsMnemonicView.textContent = state.srsMnemonic;
+    el.srsMnemonicForm.classList.add("is-hidden");
+    return;
+  }
+  el.srsMnemonicView.textContent = "No mnemonic yet";
+  el.srsMnemonicForm.classList.remove("is-hidden");
+}
+
+function renderSrs() {
+  const hasActiveCard = Boolean(state.srsCurrentCard);
+  const dueCount = state.srsDueQueue.length + (hasActiveCard ? 1 : 0);
+  const available = state.srsAvailableNewCount;
+  const remaining = state.srsDailyNewRemaining;
+  el.srsMeta.textContent = `Due ${dueCount} | New available ${available} | Daily remaining ${remaining}`;
+
+  const isCaughtUp = !hasActiveCard && dueCount === 0 && available === 0;
+  const canAddNew = !hasActiveCard && dueCount === 0 && available > 0 && remaining > 0;
+
+  el.srsReviewer.classList.toggle("is-hidden", !hasActiveCard || isCaughtUp);
+  el.srsAddNew.classList.toggle("is-hidden", !canAddNew);
+  el.srsCaughtUp.classList.toggle("is-hidden", !isCaughtUp);
+  el.srsMeta.hidden = isCaughtUp;
+  el.srsState.hidden = isCaughtUp;
+
+  if (!hasActiveCard) {
+    if (available > 0 && remaining <= 0) {
+      setStateMessage(el.srsState, "Daily new-card cap reached. More new cards unlock after reset.");
+    }
+    return;
+  }
+
+  el.srsFrontWord.textContent = state.srsCurrentCard.display_word || state.srsCurrentCard.normalized_word;
+  el.srsReveal.classList.toggle("is-hidden", !state.srsRevealed);
+  el.srsShow.disabled = state.srsRevealed;
+  el.srsWrong.disabled = !state.srsRevealed;
+  el.srsRight.disabled = !state.srsRevealed;
+  if (state.srsRevealed) {
+    renderSrsDefinitions();
+    renderSrsMnemonic();
+  }
+}
+
+function applySrsSessionData(cards, data) {
+  state.srsDueQueue = [...(cards || [])];
+  state.srsCurrentCard = state.srsDueQueue.shift() || null;
+  state.srsRevealed = false;
+  state.srsDefinitions = [];
+  state.srsMnemonic = null;
+  state.srsDailyNewRemaining = data.daily_new_remaining || 0;
+  state.srsAvailableNewCount = data.available_new_count || 0;
+  state.srsDailyResetAt = data.daily_reset_at || "";
+}
+
+async function loadSrsSession() {
+  const requestVersion = nextRequestVersion("srsSession");
+  if (!state.activeUserId) {
+    clearSrsState();
+    setStateMessage(el.srsState, "Select a user first");
+    return;
+  }
+  setStateMessage(el.srsState, "Loading...");
+  try {
+    const data = await state.api.getSrsSession(state.activeUserId, timezoneOffsetMinutes());
+    if (!isCurrentRequest("srsSession", requestVersion)) {
+      return;
+    }
+    applySrsSessionData(data.due_cards, data);
+    setStateMessage(el.srsState, "");
+    renderSrs();
+  } catch (err) {
+    if (!isCurrentRequest("srsSession", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.srsState, String(err.message || err), true);
+  }
+}
+
+async function loadSrsDetailsForCurrentCard() {
+  const word = state.srsCurrentCard?.normalized_word;
+  const requestVersion = nextRequestVersion("srsDetails");
+  if (!state.activeUserId || !word) {
+    return;
+  }
+  state.srsLoadingDetailsForWord = word;
+  try {
+    const [meanings, details] = await Promise.all([
+      state.api.listMeanings(state.activeUserId, word),
+      state.api.getWordDetails(state.activeUserId, word),
+    ]);
+    if (!isCurrentRequest("srsDetails", requestVersion) || state.srsCurrentCard?.normalized_word !== word) {
+      return;
+    }
+    state.srsDefinitions = meanings.items || [];
+    state.srsMnemonic = details?.mnemonic || null;
+    renderSrs();
+  } catch (err) {
+    if (!isCurrentRequest("srsDetails", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.srsState, `Failed to load card details: ${String(err.message || err)}`, true);
+  } finally {
+    if (state.srsLoadingDetailsForWord === word) {
+      state.srsLoadingDetailsForWord = "";
+    }
+  }
+}
+
+async function revealSrsCard() {
+  if (!state.srsCurrentCard || state.srsRevealed) {
+    return;
+  }
+  state.srsRevealed = true;
+  renderSrs();
+  await loadSrsDetailsForCurrentCard();
+}
+
+async function submitSrsResult(result) {
+  const card = state.srsCurrentCard;
+  if (!card || !state.srsRevealed) {
+    return;
+  }
+  const requestVersion = nextRequestVersion("srsReview");
+  try {
+    await state.api.submitSrsReview(state.activeUserId, card.normalized_word, result);
+    if (!isCurrentRequest("srsReview", requestVersion)) {
+      return;
+    }
+    if (result === "wrong") {
+      srsReinsertWrongCard(card);
+    }
+    state.srsCurrentCard = state.srsDueQueue.shift() || null;
+    state.srsRevealed = false;
+    state.srsDefinitions = [];
+    state.srsMnemonic = null;
+    setStateMessage(el.srsState, "");
+    renderSrs();
+  } catch (err) {
+    if (!isCurrentRequest("srsReview", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.srsState, `Review failed: ${String(err.message || err)}`, true);
+  }
 }
 
 async function loadUsers() {
@@ -433,7 +696,8 @@ function renderTexts() {
     const title = document.createElement("strong");
     title.textContent = text.title;
     const progress = document.createElement("div");
-    progress.innerHTML = `<small>Known: ${text.progress.known_count} | Unknown: ${text.progress.unknown_count} | Never: ${text.progress.never_seen_count} | ${text.progress.known_percent}%</small>`;
+    const totalEngaged = text.progress.known_percent + text.progress.stage3_percent;
+    progress.innerHTML = `<small>Known: ${text.progress.known_count} | Unknown: ${text.progress.unknown_count} | Never: ${text.progress.never_seen_count} | ${text.progress.known_percent}% / ${totalEngaged}%</small>`;
     const renameState = document.createElement("div");
     renameState.className = "state";
 
@@ -445,7 +709,12 @@ function renderTexts() {
     open.title = "Open this text in Reader view";
     open.onclick = async () => {
       state.openTextId = text.text_id;
-      state.sentenceIndex = 0;
+      try {
+        const position = await state.api.getTextPosition(state.activeUserId, text.text_id);
+        state.sentenceIndex = Math.max(0, Number(position?.sentence_index || 0));
+      } catch (_) {
+        state.sentenceIndex = 0;
+      }
       state.maxSentenceIndex = null;
       state.currentSentence = null;
       clearWordDetailsPanel();
@@ -733,12 +1002,27 @@ async function loadSentence() {
       return;
     }
     renderSentence(data);
+    try {
+      await state.api.updateTextPosition(requestedUserId, requestedTextId, data.sentence_index);
+    } catch (_) {
+      // Don't block reader rendering if position persistence fails.
+    }
     setStateMessage(el.readerState, "");
   } catch (err) {
     if (!isCurrentRequest("sentence", requestVersion)) {
       return;
     }
     if (String(err.message || err) === "sentence_not_found") {
+      if (requestedSentenceIndex !== 0) {
+        state.sentenceIndex = 0;
+        try {
+          await state.api.updateTextPosition(requestedUserId, requestedTextId, 0);
+        } catch (_) {
+          // Ignore persistence failure and still fallback to first sentence.
+        }
+        await loadSentence();
+        return;
+      }
       setStateMessage(el.readerState, `Sentence ${state.sentenceIndex} is out of range for this text`, true);
       return;
     }
@@ -858,6 +1142,33 @@ function renderMeanings(data) {
 function renderWordDetails(data) {
   el.wordMnemonic.value = data?.mnemonic || "";
   setStateMessage(el.mnemonicState, "");
+}
+
+async function renderBackupStatus() {
+  try {
+    const data = await state.api.getBackupStatus();
+    const elBackup = el.backupStatus;
+    if (!elBackup) return;
+
+    elBackup.textContent = "";
+    elBackup.className = "backup-status";
+
+    if (data.status === "ok") {
+      elBackup.textContent = `✓ backed up ${data.last_backup_date}`;
+      elBackup.classList.add("ok");
+    } else if (data.status === "overdue") {
+      elBackup.textContent = "⚠ no backup yet";
+      elBackup.classList.add("overdue");
+    } else if (data.status === "failed") {
+      elBackup.textContent = "⚠ backup failed";
+      elBackup.classList.add("failed");
+    }
+  } catch (error) {
+    // Silently fail if backup status is unavailable
+    if (el.backupStatus) {
+      el.backupStatus.textContent = "";
+    }
+  }
 }
 
 async function loadWordDetailsForWord(word) {
@@ -1081,6 +1392,9 @@ el.createUserForm.onsubmit = async (event) => {
     el.newUserName.value = "";
     await loadUsers();
     await Promise.all([loadTexts(), loadWords()]);
+    if (state.activeView === "srs") {
+      await loadSrsSession();
+    }
   } catch (err) {
     setStateMessage(el.usersState, String(err.message || err), true);
   }
@@ -1092,6 +1406,9 @@ el.activeUser.onchange = async () => {
   clearUserScopedViews();
   state.wordsLimit = Number(el.wordsLimit.value);
   await Promise.all([loadTexts(), loadWords()]);
+  if (state.activeView === "srs") {
+    await loadSrsSession();
+  }
 };
 
 el.createTextForm.onsubmit = async (event) => {
@@ -1235,11 +1552,118 @@ el.generateMeaningForm.onsubmit = async (event) => {
   }
 };
 
+el.srsShow.onclick = () => {
+  void revealSrsCard();
+};
+
+el.srsWrong.onclick = () => {
+  void submitSrsResult("wrong");
+};
+
+el.srsRight.onclick = () => {
+  void submitSrsResult("right");
+};
+
+el.srsAddNewForm.onsubmit = async (event) => {
+  event.preventDefault();
+  if (!state.activeUserId) {
+    setStateMessage(el.srsState, "Select a user first", true);
+    return;
+  }
+  if (state.srsCurrentCard || state.srsDueQueue.length > 0) {
+    setStateMessage(el.srsState, "Clear due reviews first", true);
+    return;
+  }
+
+  const count = Math.max(1, Number(el.srsAddCount.value || "10"));
+  const submitButton = el.srsAddSubmit;
+  const previousText = submitButton.textContent;
+  try {
+    submitButton.disabled = true;
+    submitButton.textContent = "Adding...";
+    setStateMessage(el.srsState, "Adding...");
+    const data = await state.api.addSrsNewCards(state.activeUserId, count, timezoneOffsetMinutes());
+    applySrsSessionData(data.added_cards, data);
+    setStateMessage(el.srsState, "");
+    renderSrs();
+  } catch (err) {
+    setStateMessage(el.srsState, String(err.message || err), true);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = previousText || "Add New Cards";
+  }
+};
+
+el.srsMnemonicForm.onsubmit = async (event) => {
+  event.preventDefault();
+  const word = state.srsCurrentCard?.normalized_word;
+  if (!word || !state.activeUserId) {
+    return;
+  }
+  const nextMnemonic = el.srsMnemonicInput.value.trim() || null;
+  const previousText = el.srsMnemonicSave.textContent;
+  try {
+    el.srsMnemonicSave.disabled = true;
+    el.srsMnemonicSave.textContent = "Saving...";
+    setStateMessage(el.srsState, "Saving mnemonic...");
+    const data = await state.api.updateWordDetails(state.activeUserId, word, nextMnemonic);
+    if (state.srsCurrentCard?.normalized_word !== word) {
+      return;
+    }
+    state.srsMnemonic = data?.mnemonic || null;
+    el.srsMnemonicInput.value = "";
+    setStateMessage(el.srsState, "");
+    renderSrs();
+  } catch (err) {
+    setStateMessage(el.srsState, `Mnemonic save failed: ${String(err.message || err)}`, true);
+  } finally {
+    el.srsMnemonicSave.disabled = false;
+    el.srsMnemonicSave.textContent = previousText || "Save Mnemonic";
+  }
+};
+
+el.srsStatsLink.onclick = (event) => {
+  event.preventDefault();
+  setStateMessage(el.srsState, "Stats view is not implemented yet");
+};
+
+window.addEventListener("keydown", (event) => {
+  if (state.activeView !== "srs") {
+    return;
+  }
+  const activeTag = document.activeElement?.tagName?.toLowerCase() || "";
+  if (activeTag === "textarea") {
+    return;
+  }
+  if (event.key === " " || event.code === "Space") {
+    if (state.srsCurrentCard && !state.srsRevealed) {
+      event.preventDefault();
+      void revealSrsCard();
+    }
+    return;
+  }
+  if (event.key === "0") {
+    if (state.srsCurrentCard && state.srsRevealed) {
+      event.preventDefault();
+      void submitSrsResult("wrong");
+    }
+    return;
+  }
+  if (event.key === "1" && state.srsCurrentCard && state.srsRevealed) {
+    event.preventDefault();
+    void submitSrsResult("right");
+  }
+});
+
 (async function bootstrap() {
   el.wordsLimit.value = String(state.wordsLimit);
   setActiveView(state.activeView, false);
+  void renderBackupStatus();
   await loadUsers();
   if (state.activeUserId) {
     await Promise.all([loadTexts(), loadWords()]);
+    if (state.activeView === "srs") {
+      await loadSrsSession();
+    }
   }
 })();

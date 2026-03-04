@@ -78,12 +78,48 @@ def init_db(conn: sqlite3.Connection) -> None:
             UNIQUE(user_id, normalized_word)
         );
 
+        CREATE TABLE IF NOT EXISTS user_text_positions (
+            user_id TEXT NOT NULL,
+            text_id TEXT NOT NULL,
+            sentence_index INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, text_id),
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY(text_id) REFERENCES texts(text_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS srs_cards (
+            user_id TEXT NOT NULL,
+            normalized_word TEXT NOT NULL,
+            is_new INTEGER NOT NULL DEFAULT 1,
+            is_introduced INTEGER NOT NULL DEFAULT 0,
+            stage_index INTEGER NOT NULL DEFAULT 0,
+            due_at TEXT NOT NULL,
+            introduced_at TEXT,
+            last_reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, normalized_word),
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS srs_daily_new_counts (
+            user_id TEXT NOT NULL,
+            window_start_at TEXT NOT NULL,
+            new_count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, window_start_at),
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at);
         CREATE INDEX IF NOT EXISTS idx_texts_user_id ON texts(user_id);
         CREATE INDEX IF NOT EXISTS idx_sentences_text_id ON text_sentences(text_id, sentence_index);
         CREATE INDEX IF NOT EXISTS idx_words_user_state ON user_words(user_id, state, normalized_word);
         CREATE INDEX IF NOT EXISTS idx_meanings_user_word ON meanings(user_id, normalized_word, created_at);
         CREATE INDEX IF NOT EXISTS idx_word_details_user_word ON word_details(user_id, normalized_word);
+        CREATE INDEX IF NOT EXISTS idx_user_text_positions_user_text ON user_text_positions(user_id, text_id);
+        CREATE INDEX IF NOT EXISTS idx_srs_cards_user_due ON srs_cards(user_id, is_introduced, due_at);
+        CREATE INDEX IF NOT EXISTS idx_srs_cards_user_new ON srs_cards(user_id, is_new, created_at);
         """
     )
     conn.commit()

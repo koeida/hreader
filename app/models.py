@@ -37,11 +37,23 @@ class TextUpdateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
 
 
+class TextPositionResponse(BaseModel):
+    user_id: str
+    text_id: str
+    sentence_index: int
+    updated_at: datetime | None
+
+
+class TextPositionUpdateRequest(BaseModel):
+    sentence_index: int = Field(ge=0)
+
+
 class TextProgress(BaseModel):
     known_count: int
     unknown_count: int
     never_seen_count: int
     known_percent: float
+    stage3_percent: float
 
 
 class TextResponse(BaseModel):
@@ -127,6 +139,48 @@ class WordDetailsResponse(BaseModel):
 
 class WordDetailsUpdateRequest(BaseModel):
     mnemonic: str | None = Field(default=None, max_length=500)
+
+
+class SrsCardResponse(BaseModel):
+    user_id: str
+    normalized_word: str
+    display_word: str
+    is_new: bool
+    is_introduced: bool
+    stage_index: int
+    due_at: datetime
+    introduced_at: datetime | None
+    last_reviewed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SrsSessionResponse(BaseModel):
+    due_cards: list[SrsCardResponse]
+    daily_new_remaining: int
+    available_new_count: int
+    daily_reset_at: datetime
+
+
+class SrsSessionAddNewRequest(BaseModel):
+    count: int = Field(default=10, ge=1, le=100)
+    timezone_offset_minutes: int = Field(default=0, ge=-840, le=840)
+
+
+class SrsSessionAddNewResponse(BaseModel):
+    added_cards: list[SrsCardResponse]
+    daily_new_remaining: int
+    available_new_count: int
+    daily_reset_at: datetime
+
+
+class SrsReviewRequest(BaseModel):
+    normalized_word: str = Field(min_length=1)
+    result: Literal["right", "wrong"]
+
+
+class SrsReviewResponse(BaseModel):
+    card: SrsCardResponse
 
 
 class HealthResponse(BaseModel):
