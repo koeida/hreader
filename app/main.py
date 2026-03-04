@@ -825,14 +825,16 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         ensure_srs_cards_for_unknown_words(conn, user_id)
 
         now = datetime.now(UTC)
-        now_iso = to_iso_utc(now)
+        window_start_utc, window_end_utc = srs_window_bounds(now, timezone_offset_minutes)
+        window_start_iso = to_iso_utc(window_start_utc)
+        window_end_iso = to_iso_utc(window_end_utc)
         due_rows = conn.execute(
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND is_introduced = 1 AND due_at <= ?
+            WHERE user_id = ? AND is_introduced = 1 AND due_at >= ? AND due_at < ?
             """,
-            (user_id, now_iso),
+            (user_id, window_start_iso, window_end_iso),
         ).fetchall()
         due_word_order = [row["normalized_word"] for row in due_rows]
         due_display_words = resolve_srs_display_words(conn, user_id, due_word_order)
@@ -850,8 +852,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """,
             (user_id,),
         ).fetchone()["total"]
-        window_start_utc, window_end_utc = srs_window_bounds(now, timezone_offset_minutes)
-        used = get_daily_new_count(conn, user_id, to_iso_utc(window_start_utc))
+        used = get_daily_new_count(conn, user_id, window_start_iso)
         daily_new_remaining = max(0, SRS_DAILY_NEW_CAP - used)
         return SrsSessionResponse(
             due_cards=due_cards,
