@@ -1,7 +1,19 @@
 # Agent Instructions
 
+## Product Constraints
+
 - Never develop for mobile. Prioritize desktop-only behavior and UX across the product unless explicitly overridden by the user in that session.
 - Reader word details must be implemented as an inline desktop panel below the reader sentence, never as a modal or overlay.
+
+## Documentation (Start Here!)
+
+**New to this codebase?** Read these in order:
+
+1. **[`INDEX.md`](INDEX.md)** — Navigation hub for all documentation, organized by role
+2. **[`docs/DEVELOPER.md`](docs/DEVELOPER.md)** — One-page architecture reference with file purposes, subsystems, patterns, and common tasks
+3. **[`README.md`](README.md)** — Setup, run, test commands
+
+For specific features, see the `specs/` folder.
 
 ## Server Recovery (Local)
 
