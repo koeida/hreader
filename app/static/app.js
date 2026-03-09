@@ -1963,11 +1963,11 @@ window.addEventListener("keydown", (event) => {
     await Promise.all([loadTexts(), loadWords()]);
     hideUserSelection();
   } else {
-    // No logged-in user, show the selection modal but keep library visible for user creation
+    // No logged-in user, show only the modal on blank page
     state.isLoggedIn = false;
     state.currentView = "library";
-    el.sectionLibrary.classList.add("active");
     el.appHeader.classList.add("is-hidden");
+    el.sectionLibrary.classList.remove("active");
     el.sectionSrs.classList.remove("active");
     el.sectionReader.classList.remove("active");
     el.readerExitBtn.classList.remove("active");
