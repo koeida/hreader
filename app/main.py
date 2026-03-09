@@ -982,13 +982,15 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 (next_stage, to_iso_utc(next_due), now_iso, now_iso, user_id, normalized),
             )
         else:
+            wrong_delay_hours = random.randint(4, 12)
+            wrong_due = now + timedelta(hours=wrong_delay_hours)
             conn.execute(
                 """
                 UPDATE srs_cards
                 SET stage_index = 0, due_at = ?, last_reviewed_at = ?, updated_at = ?, is_introduced = 1, is_new = 0
                 WHERE user_id = ? AND normalized_word = ?
                 """,
-                (now_iso, now_iso, now_iso, user_id, normalized),
+                (to_iso_utc(wrong_due), now_iso, now_iso, user_id, normalized),
             )
         conn.commit()
 

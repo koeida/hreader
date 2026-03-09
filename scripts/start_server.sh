@@ -61,6 +61,7 @@ PY
 )"
 fi
 
+cd "$ROOT_DIR"
 nohup "$UVICORN_BIN" app.main:app --host "$HOST" --port "$PORT" >"$LOG_FILE" 2>&1 &
 NEW_PID="$!"
 echo "$NEW_PID" > "$PID_FILE"

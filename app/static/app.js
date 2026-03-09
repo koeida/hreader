@@ -341,6 +341,7 @@ function clearWordDetailsPanel() {
   setStateMessage(el.meaningsState, "");
   el.wordMnemonic.value = "";
   el.manualMeaning.value = "";
+  el.meaningContext.value = "";
   el.meaningsPreview.innerHTML = "";
   el.meaningsList.innerHTML = "";
 }
@@ -891,10 +892,11 @@ function renderWordDetailsPanel() {
   el.wordDetailsPanel.classList.remove("is-hidden");
   el.wordDetailsWord.textContent = state.selectedWord;
   el.wordDetailsStatus.textContent = stateLabel(token?.state || "never_seen");
-  if (!el.meaningContext.value.trim() && state.currentSentence?.sentence_text) {
+  if (state.currentSentence?.sentence_text && !el.meaningContext.value.trim()) {
     el.meaningContext.value = state.currentSentence.sentence_text;
   }
 }
+
 
 function animateSelectionPulse() {
   const activeButtons = Array.from(el.readerSentence.querySelectorAll(".sentence-word.active"));

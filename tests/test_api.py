@@ -558,7 +558,8 @@ def test_srs_review_right_progression_plateau_and_wrong_reset(tmp_path: Path) ->
         wrong_data = wrong.json()["card"]
         assert wrong_data["stage_index"] == 0
         due_at = datetime.fromisoformat(wrong_data["due_at"].replace("Z", "+00:00")).astimezone(UTC)
-        assert abs((datetime.now(UTC) - due_at).total_seconds()) < 5
+        delta_hours = (due_at - datetime.now(UTC)).total_seconds() / 3600
+        assert 3.9 <= delta_hours <= 12.1
 
 
 def test_srs_known_and_never_seen_remove_existing_card(tmp_path: Path) -> None:
