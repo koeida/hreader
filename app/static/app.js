@@ -675,11 +675,11 @@ function clearUserScopedViews() {
   state.maxSentenceIndex = null;
   state.currentSentence = null;
   state.wordsPage = 1;
-  el.textsList.innerHTML = "";
+  if (el.textsList) el.textsList.innerHTML = "";
   el.readerMeta.textContent = "No text open";
   setStateMessage(el.readerState, "");
   el.readerSentence.textContent = "";
-  el.wordsList.innerHTML = "";
+  if (el.wordsList) el.wordsList.innerHTML = "";
   el.wordsPageLabel.textContent = "Page 1";
   el.wordsPrevPage.disabled = true;
   el.wordsNextPage.disabled = true;
@@ -716,7 +716,7 @@ function srsReinsertWrongCard(card) {
 }
 
 function renderSrsDefinitions() {
-  el.srsDefinitions.innerHTML = "";
+  if (el.srsDefinitions) el.srsDefinitions.innerHTML = "";
   if (state.srsDefinitions.length === 0) {
     const li = document.createElement("li");
     li.className = "empty-row";
@@ -913,7 +913,7 @@ function renderTexts() {
     return;
   }
 
-  el.textsList.innerHTML = "";
+  if (el.textsList) el.textsList.innerHTML = "";
   for (const text of state.texts) {
     const li = document.createElement("li");
     const title = document.createElement("strong");
@@ -1273,7 +1273,7 @@ function renderWords(data) {
     return;
   }
 
-  el.wordsList.innerHTML = "";
+  if (el.wordsList) el.wordsList.innerHTML = "";
   for (const item of data.items) {
     const li = document.createElement("li");
     li.innerHTML = `<strong>${item.normalized_word}</strong> <small>${item.state}</small>`;
