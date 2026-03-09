@@ -1953,6 +1953,7 @@ window.addEventListener("keydown", (event) => {
 
   // Load users first
   await loadUsers();
+  await renderUserPicker();
 
   // Check if there's a logged-in user from localStorage
   if (state.activeUserId) {
