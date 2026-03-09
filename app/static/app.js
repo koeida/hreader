@@ -425,16 +425,12 @@ async function renderUserPicker() {
 
 async function handleUserPick(userId) {
   if (!userId) return;
-  console.log("handleUserPick called with:", userId);
   state.activeUserId = userId;
   state.isLoggedIn = true;
   localStorage.setItem("active_user_id", userId);
   hideUserSelection();
-  console.log("Loading texts and words...");
   await Promise.all([loadTexts(), loadWords()]);
-  console.log("Switching to library view...");
   switchView("library");
-  console.log("Done");
 }
 
 function handleLogout() {
