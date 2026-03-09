@@ -464,6 +464,7 @@ async function renderLibraryGrid() {
   if (!state.activeUserId) return;
 
   const grid = el.libraryGrid;
+  if (!grid) return;
   grid.innerHTML = "";
 
   if (state.texts.length === 0) {
