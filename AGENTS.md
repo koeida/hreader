@@ -5,10 +5,19 @@
 - Never develop for mobile. Prioritize desktop-only behavior and UX across the product unless explicitly overridden by the user in that session.
 - Reader word details must be implemented as an inline desktop panel below the reader sentence, never as a modal or overlay.
 
+## Environment & Python
+
+Always activate the virtual environment before running Python commands:
+```bash
+source .venv/bin/activate
+```
+Then use `python` (not `python3`) to run scripts and commands. The venv is located in `.venv/` at the repo root.
+
 ## Before Major Work
 
 When starting a major spec or UI redesign, run the backup routine to create a safe checkpoint:
 ```bash
+source .venv/bin/activate
 python scripts/manual_backup.py
 ```
 This ensures we have a clean database backup before making significant changes. Backups are stored in `~/.hreader/backups/`.
