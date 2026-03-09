@@ -95,7 +95,8 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
             unknown_count=0,
             never_seen_count=0,
             known_percent=0.0,
-            stage3_percent=0.0,
+            stage4_percent=0.0,
+            total_words=0,
         )
 
     placeholders = ",".join("?" for _ in unique_words)
@@ -109,21 +110,21 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
     ).fetchall()
     state_map = {row["normalized_word"]: row["state"] for row in state_rows}
 
-    # Get SRS stage_index >= 3 for words not already known
-    stage3_rows = conn.execute(
+    # Get SRS stage_index >= 4 for words not already known
+    stage4_rows = conn.execute(
         f"""
         SELECT normalized_word
         FROM srs_cards
-        WHERE user_id = ? AND normalized_word IN ({placeholders}) AND stage_index >= 3
+        WHERE user_id = ? AND normalized_word IN ({placeholders}) AND stage_index >= 4
         """,
         (user_id, *sorted(unique_words)),
     ).fetchall()
-    stage3_set = {row["normalized_word"] for row in stage3_rows}
+    stage4_set = {row["normalized_word"] for row in stage4_rows}
 
     known = 0
     unknown = 0
     never_seen = 0
-    stage3 = 0
+    stage4 = 0
     for word in unique_words:
         state = state_map.get(word, "never_seen")
         if state == "known":
@@ -133,19 +134,20 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
         else:
             never_seen += 1
 
-        # Count stage 3+ separately (doesn't include known words)
-        if word in stage3_set and state != "known":
-            stage3 += 1
+        # Count stage 4+ separately (doesn't include known words)
+        if word in stage4_set and state != "known":
+            stage4 += 1
 
     total = len(unique_words)
     known_percent = round((known / total) * 100.0, 2) if total > 0 else 0.0
-    stage3_percent = round((stage3 / total) * 100.0, 2) if total > 0 else 0.0
+    stage4_percent = round((stage4 / total) * 100.0, 2) if total > 0 else 0.0
     return TextProgress(
         known_count=known,
         unknown_count=unknown,
         never_seen_count=never_seen,
         known_percent=known_percent,
-        stage3_percent=stage3_percent,
+        stage4_percent=stage4_percent,
+        total_words=total,
     )
 
 

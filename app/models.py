@@ -53,7 +53,8 @@ class TextProgress(BaseModel):
     unknown_count: int
     never_seen_count: int
     known_percent: float
-    stage3_percent: float
+    stage4_percent: float
+    total_words: int
 
 
 class TextResponse(BaseModel):

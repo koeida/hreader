@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import socket
 import threading
 import time
@@ -64,26 +65,44 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str) -> N
         except playwright.Error as exc:
             pytest.skip(f"Playwright browser runtime unavailable: {exc}")
 
+        # Create test user and text via API
+        user_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users",
+                method="POST",
+                data=json.dumps({"display_name": "Browser User"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        user_data = json.load(user_resp)
+        user_id = user_data["user_id"]
+
+        text_body = "שָׁלוֹם לָכֶם. אָבָא אִמָא יֶלֶד."
+        text_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users/{user_id}/texts",
+                method="POST",
+                data=json.dumps({"title": "Panel Behavior", "content": text_body}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        text_data = json.load(text_resp)
+        text_id = text_data["text_id"]
+
         context = browser.new_context(base_url=live_server)
         page = context.new_page()
 
+        # Set user in localStorage to log in
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
         page.goto("/", wait_until="networkidle")
 
         assert page.locator("#word-modal").count() == 0
         assert page.locator("#jump-sentence-form").count() == 0
         assert page.locator("text=API Base URL").count() == 0
 
-        page.fill("#new-user-name", "Browser User")
-        page.click("#create-user-form button[type='submit']")
-        page.wait_for_selector("#users-list li")
-
-        text_body = "שָׁלוֹם לָכֶם. אָבָא אִמָא יֶלֶד."
-        page.fill("#new-text-title", "Panel Behavior")
-        page.fill("#new-text-content", text_body)
-        page.click("#create-text-form button[type='submit']")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-
-        page.click("#texts-list li button:has-text('Open in Reader')")
+        # Click on the text card to open reader
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         page.click("#next-sentence")
         page.wait_for_selector(".sentence-word")
 
@@ -116,9 +135,14 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str) -> N
         page.wait_for_selector(".sentence-word")
         page.locator(".sentence-word").first.click()
         page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
-        page.click("#view-words")
+
+        # Exit reader to go back to library (hides word-details-panel)
+        page.click("#reader-exit-btn")
         page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('is-hidden')")
-        page.click("#view-reader")
+
+        # Click on text card to re-enter reader
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('is-hidden')")
 
         context.close()
@@ -134,6 +158,29 @@ def test_reader_words_stay_clickable_during_generate_request(live_server: str) -
         except playwright.Error as exc:
             pytest.skip(f"Playwright browser runtime unavailable: {exc}")
 
+        # Create test user and text via API
+        user_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users",
+                method="POST",
+                data=json.dumps({"display_name": "Async User"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        user_data = json.load(user_resp)
+        user_id = user_data["user_id"]
+
+        text_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users/{user_id}/texts",
+                method="POST",
+                data=json.dumps({"title": "Async Text", "content": "אָבָא אִמָא יֶלֶד."}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        text_data = json.load(text_resp)
+        text_id = text_data["text_id"]
+
         context = browser.new_context(base_url=live_server)
         page = context.new_page()
 
@@ -142,17 +189,13 @@ def test_reader_words_stay_clickable_during_generate_request(live_server: str) -
             lambda route: (time.sleep(0.4), route.continue_()),
         )
 
+        # Set user in localStorage to log in
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
         page.goto("/", wait_until="networkidle")
 
-        page.fill("#new-user-name", "Async User")
-        page.click("#create-user-form button[type='submit']")
-        page.wait_for_selector("#users-list li")
-
-        page.fill("#new-text-title", "Async Text")
-        page.fill("#new-text-content", "אָבָא אִמָא יֶלֶד.")
-        page.click("#create-text-form button[type='submit']")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-        page.click("#texts-list li button:has-text('Open in Reader')")
+        # Click on the text card to open reader
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         page.wait_for_selector(".sentence-word")
 
         first = page.locator(".sentence-word").first
@@ -182,19 +225,39 @@ def test_reader_sentence_enforces_rtl_word_bubble_order(live_server: str) -> Non
         except playwright.Error as exc:
             pytest.skip(f"Playwright browser runtime unavailable: {exc}")
 
+        # Create test user and text via API
+        user_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users",
+                method="POST",
+                data=json.dumps({"display_name": "RTL User"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        user_data = json.load(user_resp)
+        user_id = user_data["user_id"]
+
+        text_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users/{user_id}/texts",
+                method="POST",
+                data=json.dumps({"title": "RTL Sentence", "content": "אָבָא אִמָא יֶלֶד."}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        text_data = json.load(text_resp)
+        text_id = text_data["text_id"]
+
         context = browser.new_context(base_url=live_server)
         page = context.new_page()
+
+        # Set user in localStorage to log in
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
         page.goto("/", wait_until="networkidle")
 
-        page.fill("#new-user-name", "RTL User")
-        page.click("#create-user-form button[type='submit']")
-        page.wait_for_selector("#users-list li")
-
-        page.fill("#new-text-title", "RTL Sentence")
-        page.fill("#new-text-content", "אָבָא אִמָא יֶלֶד.")
-        page.click("#create-text-form button[type='submit']")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-        page.click("#texts-list li button:has-text('Open in Reader')")
+        # Click on the text card to open reader
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         page.wait_for_selector(".sentence-word")
 
         rtl_contract = page.evaluate(
@@ -232,19 +295,39 @@ def test_duplicate_words_cycle_updates_all_occurrences(live_server: str) -> None
         except playwright.Error as exc:
             pytest.skip(f"Playwright browser runtime unavailable: {exc}")
 
+        # Create test user and text via API
+        user_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users",
+                method="POST",
+                data=json.dumps({"display_name": "Duplicate User"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        user_data = json.load(user_resp)
+        user_id = user_data["user_id"]
+
+        text_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users/{user_id}/texts",
+                method="POST",
+                data=json.dumps({"title": "Duplicate Sentence", "content": "אָבָא אָבָא יֶלֶד."}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        text_data = json.load(text_resp)
+        text_id = text_data["text_id"]
+
         context = browser.new_context(base_url=live_server)
         page = context.new_page()
+
+        # Set user in localStorage to log in
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
         page.goto("/", wait_until="networkidle")
 
-        page.fill("#new-user-name", "Duplicate User")
-        page.click("#create-user-form button[type='submit']")
-        page.wait_for_selector("#users-list li")
-
-        page.fill("#new-text-title", "Duplicate Sentence")
-        page.fill("#new-text-content", "אָבָא אָבָא יֶלֶד.")
-        page.click("#create-text-form button[type='submit']")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-        page.click("#texts-list li button:has-text('Open in Reader')")
+        # Click on the text card to open reader
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         page.wait_for_selector(".sentence-word")
 
         page.locator(".sentence-word").first.click()
@@ -275,31 +358,51 @@ def test_reader_reopens_text_at_last_persisted_sentence_after_reload(live_server
         except playwright.Error as exc:
             pytest.skip(f"Playwright browser runtime unavailable: {exc}")
 
+        # Create test user and text via API
+        user_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users",
+                method="POST",
+                data=json.dumps({"display_name": "Resume User"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        user_data = json.load(user_resp)
+        user_id = user_data["user_id"]
+
+        content = " ".join([f"מִשְׁפָּט{i}." for i in range(1, 41)])
+        text_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users/{user_id}/texts",
+                method="POST",
+                data=json.dumps({"title": "Resume Story", "content": content}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        text_data = json.load(text_resp)
+        text_id = text_data["text_id"]
+
         context = browser.new_context(base_url=live_server)
         page = context.new_page()
+
+        # Set user in localStorage to log in
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
         page.goto("/", wait_until="networkidle")
 
-        page.fill("#new-user-name", "Resume User")
-        page.click("#create-user-form button[type='submit']")
-        page.wait_for_selector("#users-list li")
-
-        content = " ".join([f"מִשְׁפָּט{i}." for i in range(1, 41)])
-        page.fill("#new-text-title", "Resume Story")
-        page.fill("#new-text-content", content)
-        page.click("#create-text-form button[type='submit']")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-
-        page.click("#texts-list li button:has-text('Open in Reader')")
+        # Click on the text card to open reader
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         for _ in range(31):
             page.click("#next-sentence")
         page.wait_for_function(
             "() => document.getElementById('reader-meta').textContent.includes('sentence 31')"
         )
 
-        page.click("#view-library")
+        # Exit reader and reload
+        page.click("#reader-exit-btn")
         page.reload(wait_until="networkidle")
-        page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
-        page.click("#texts-list li button:has-text('Open in Reader')")
+        page.wait_for_selector(".text-widget")
+        page.click(".text-widget")
         page.wait_for_function(
             "() => document.getElementById('reader-meta').textContent.includes('sentence 31')"
         )

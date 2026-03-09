@@ -186,6 +186,9 @@ const state = {
   wordsPage: 1,
   wordsLimit: 50,
   activeView: localStorage.getItem("active_view") || "library",
+  currentView: "library",
+  isLoggedIn: !!localStorage.getItem("active_user_id"),
+  selectedTextId: null,
   srsDueQueue: [],
   srsCurrentCard: null,
   srsRevealed: false,
@@ -211,6 +214,19 @@ const state = {
 
 const el = {
   appRoot: document.querySelector("[data-testid='app-root']"),
+  appHeader: document.getElementById("app-header"),
+  mainContent: document.getElementById("main-content"),
+  navLibrary: document.getElementById("nav-library"),
+  navSrs: document.getElementById("nav-srs"),
+  logoutLink: document.getElementById("logout-link"),
+  userSelectionModal: document.getElementById("user-selection-modal"),
+  userPicker: document.getElementById("user-picker"),
+  userPickConfirm: document.getElementById("user-pick-confirm"),
+  sectionLibrary: document.getElementById("section-library"),
+  sectionReader: document.getElementById("section-reader"),
+  sectionSrs: document.getElementById("section-srs"),
+  readerExitBtn: document.getElementById("reader-exit-btn"),
+  libraryGrid: document.getElementById("library-grid"),
   includeDeleted: document.getElementById("include-deleted"),
   refreshUsers: document.getElementById("refresh-users"),
   createUserForm: document.getElementById("create-user-form"),
@@ -344,6 +360,211 @@ function clearWordDetailsPanel() {
   el.meaningContext.value = "";
   el.meaningsPreview.innerHTML = "";
   el.meaningsList.innerHTML = "";
+}
+
+// === View Management Functions ===
+
+function updateViewVisibility() {
+  const v = state.currentView;
+  const loggedIn = state.isLoggedIn;
+
+  // Hide/show header
+  el.appHeader.classList.toggle("is-hidden", !loggedIn || v === "reader");
+
+  // Hide/show sections
+  el.sectionLibrary.classList.toggle("active", loggedIn && v === "library");
+  el.sectionSrs.classList.toggle("active", loggedIn && v === "srs");
+  el.sectionReader.classList.toggle("active", loggedIn && v === "reader");
+
+  // Hide/show exit button
+  el.readerExitBtn.classList.toggle("active", v === "reader");
+
+  // Update nav button active state
+  if (el.navLibrary) el.navLibrary.classList.toggle("active", v === "library");
+  if (el.navSrs) el.navSrs.classList.toggle("active", v === "srs");
+}
+
+function switchView(view) {
+  state.currentView = view;
+  updateViewVisibility();
+
+  // Side effects
+  if (view === "srs" && state.isLoggedIn) {
+    void loadSrsSession();
+  }
+  if (view !== "reader") {
+    clearWordDetailsPanel();
+    renderSentence();
+  }
+}
+
+function showUserSelection() {
+  el.userSelectionModal.classList.remove("is-hidden");
+}
+
+function hideUserSelection() {
+  el.userSelectionModal.classList.add("is-hidden");
+}
+
+async function renderUserPicker() {
+  el.userPicker.innerHTML = "";
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = "-- Select a user --";
+  el.userPicker.appendChild(empty);
+
+  for (const user of state.users.filter((u) => u.deleted_at === null)) {
+    const option = document.createElement("option");
+    option.value = user.user_id;
+    option.textContent = user.display_name;
+    el.userPicker.appendChild(option);
+  }
+}
+
+async function handleUserPick(userId) {
+  if (!userId) return;
+  state.activeUserId = userId;
+  state.isLoggedIn = true;
+  localStorage.setItem("active_user_id", userId);
+  hideUserSelection();
+  await Promise.all([loadTexts(), loadWords()]);
+  switchView("library");
+}
+
+function handleLogout() {
+  state.activeUserId = "";
+  state.isLoggedIn = false;
+  state.selectedTextId = null;
+  localStorage.removeItem("active_user_id");
+  el.userPicker.value = "";
+  showUserSelection();
+}
+
+function colorForPercentage(pct) {
+  const ranges = [
+    [0, 70, [254, 226, 226], [220, 38, 38]],
+    [70, 80, [254, 243, 199], [245, 158, 11]],
+    [80, 90, [254, 249, 195], [132, 204, 22]],
+    [90, 101, [220, 252, 231], [34, 197, 94]],
+  ];
+
+  for (const [lo, hi, from, to] of ranges) {
+    if (pct >= lo && pct < hi) {
+      const t = (pct - lo) / (hi - lo);
+      const r = Math.round(from[0] + t * (to[0] - from[0]));
+      const g = Math.round(from[1] + t * (to[1] - from[1]));
+      const b = Math.round(from[2] + t * (to[2] - from[2]));
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  return `rgb(34,197,94)`;
+}
+
+async function renderLibraryGrid() {
+  if (!state.activeUserId) return;
+
+  const grid = el.libraryGrid;
+  grid.innerHTML = "";
+
+  if (state.texts.length === 0) {
+    grid.className = "empty-state";
+    const empty = document.createElement("div");
+    empty.textContent = "No texts yet. Create one to get started.";
+    grid.appendChild(empty);
+    return;
+  }
+
+  grid.className = "";
+  for (const text of state.texts) {
+    const progress = text.progress;
+    const knownPct = progress.known_percent;
+    const stage4Pct = progress.stage4_percent;
+    const highestPct = Math.max(knownPct, stage4Pct);
+    const bgColor = colorForPercentage(highestPct);
+
+    const widget = document.createElement("div");
+    widget.className = "text-widget";
+    widget.style.backgroundColor = bgColor;
+
+    const title = document.createElement("h3");
+    title.className = "text-widget__title";
+    title.textContent = text.title;
+
+    const stats = document.createElement("div");
+    stats.className = "text-widget__stats";
+    stats.innerHTML = `
+      <div>Words: ${progress.total_words.toLocaleString()}</div>
+      <div>Known: ${knownPct.toFixed(1)}% | Stage 4+: ${stage4Pct.toFixed(1)}%</div>
+    `;
+
+    const actionButtons = document.createElement("div");
+    actionButtons.className = "action-buttons";
+
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "✎";
+    editBtn.type = "button";
+    editBtn.onclick = (e) => {
+      e.stopPropagation();
+      void handleEditText(text.text_id, text.title);
+    };
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "🗑";
+    deleteBtn.type = "button";
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation();
+      void handleDeleteText(text.text_id, text.title);
+    };
+
+    actionButtons.appendChild(editBtn);
+    actionButtons.appendChild(deleteBtn);
+
+    widget.appendChild(actionButtons);
+    widget.appendChild(title);
+    widget.appendChild(stats);
+
+    widget.onclick = () => selectTextForReading(text.text_id);
+
+    grid.appendChild(widget);
+  }
+}
+
+async function selectTextForReading(textId) {
+  state.openTextId = textId;
+  state.selectedTextId = textId;
+  const pos = await state.api.getTextPosition(state.activeUserId, textId);
+  state.sentenceIndex = pos.sentence_index ?? 0;
+  switchView("reader");
+  await loadSentence();
+}
+
+function handleReaderExit() {
+  state.selectedTextId = null;
+  switchView("library");
+}
+
+async function handleEditText(textId, currentTitle) {
+  const newTitle = prompt("Rename text:", currentTitle);
+  if (!newTitle || newTitle === currentTitle) return;
+
+  try {
+    await state.api.renameText(state.activeUserId, textId, newTitle);
+    await loadTexts();
+  } catch (err) {
+    console.error("Rename failed:", err);
+  }
+}
+
+async function handleDeleteText(textId, title) {
+  const confirmed = confirm(`Delete "${title}"? This cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    await state.api.deleteText(state.activeUserId, textId);
+    await loadTexts();
+  } catch (err) {
+    console.error("Delete failed:", err);
+  }
 }
 
 function setActiveView(viewName, persist = true) {
@@ -809,23 +1030,24 @@ function renderTexts() {
 async function loadTexts() {
   const requestVersion = nextRequestVersion("texts");
   if (!state.activeUserId) {
-    renderListState(el.textsList, el.textsState, { empty: true, emptyMessage: "Select a user first" });
+    setStateMessage(el.textsState, "Select a user first");
     return;
   }
 
-  renderListState(el.textsList, el.textsState, { loading: true });
+  setStateMessage(el.textsState, "Loading...");
   try {
     const data = await state.api.listTexts(state.activeUserId);
     if (!isCurrentRequest("texts", requestVersion)) {
       return;
     }
     state.texts = data.items;
-    renderTexts();
+    await renderLibraryGrid();
+    setStateMessage(el.textsState, "");
   } catch (err) {
     if (!isCurrentRequest("texts", requestVersion)) {
       return;
     }
-    renderListState(el.textsList, el.textsState, { error: String(err.message || err) });
+    setStateMessage(el.textsState, String(err.message || err), true);
   }
 }
 
@@ -1351,31 +1573,87 @@ for (const button of el.viewButtons) {
   };
 }
 
-el.includeDeleted.onchange = () => {
-  state.includeDeleted = el.includeDeleted.checked;
-  loadUsers();
-};
-el.refreshUsers.onclick = () => loadUsers();
-el.refreshTexts.onclick = () => loadTexts();
-el.refreshWords.onclick = () => loadWords();
-el.wordsFilter.onchange = () => {
-  state.wordsPage = 1;
-  loadWords();
-};
-el.wordsLimit.onchange = () => {
-  state.wordsLimit = Number(el.wordsLimit.value);
-  state.wordsPage = 1;
-  loadWords();
-};
-el.wordsPrevPage.onclick = () => {
-  if (state.wordsPage <= 1) return;
-  state.wordsPage -= 1;
-  loadWords();
-};
-el.wordsNextPage.onclick = () => {
-  state.wordsPage += 1;
-  loadWords();
-};
+if (el.includeDeleted) {
+  el.includeDeleted.onchange = () => {
+    state.includeDeleted = el.includeDeleted.checked;
+    loadUsers();
+  };
+}
+if (el.refreshUsers) el.refreshUsers.onclick = () => loadUsers();
+if (el.refreshTexts) el.refreshTexts.onclick = () => loadTexts();
+if (el.refreshWords) el.refreshWords.onclick = () => loadWords();
+if (el.wordsFilter) {
+  el.wordsFilter.onchange = () => {
+    state.wordsPage = 1;
+    loadWords();
+  };
+}
+if (el.wordsLimit) {
+  el.wordsLimit.onchange = () => {
+    state.wordsLimit = Number(el.wordsLimit.value);
+    state.wordsPage = 1;
+    loadWords();
+  };
+}
+if (el.wordsPrevPage) {
+  el.wordsPrevPage.onclick = () => {
+    if (state.wordsPage <= 1) return;
+    state.wordsPage -= 1;
+    loadWords();
+  };
+}
+if (el.wordsNextPage) {
+  el.wordsNextPage.onclick = () => {
+    state.wordsPage += 1;
+    loadWords();
+  };
+}
+
+// === New UI Event Listeners ===
+
+if (el.navLibrary) {
+  el.navLibrary.onclick = () => {
+    switchView("library");
+  };
+}
+
+if (el.navSrs) {
+  el.navSrs.onclick = () => {
+    switchView("srs");
+  };
+}
+
+if (el.logoutLink) {
+  el.logoutLink.onclick = (event) => {
+    event.preventDefault();
+    handleLogout();
+  };
+}
+
+if (el.userPickConfirm) {
+  el.userPickConfirm.onclick = async () => {
+    const userId = el.userPicker.value;
+    if (userId) {
+      await handleUserPick(userId);
+    }
+  };
+}
+
+if (el.userPicker) {
+  el.userPicker.onchange = () => {
+    const userId = el.userPicker.value;
+    if (userId) {
+      void handleUserPick(userId);
+    }
+  };
+}
+
+if (el.readerExitBtn) {
+  el.readerExitBtn.onclick = () => {
+    handleReaderExit();
+  };
+}
+
 window.addEventListener("pointermove", (event) => {
   const x = `${Math.round((event.clientX / window.innerWidth) * 100)}%`;
   const y = `${Math.round((event.clientY / window.innerHeight) * 100)}%`;
@@ -1383,65 +1661,75 @@ window.addEventListener("pointermove", (event) => {
   document.documentElement.style.setProperty("--mouse-y", y);
 });
 
-el.createUserForm.onsubmit = async (event) => {
-  event.preventDefault();
-  try {
-    const name = el.newUserName.value.trim();
-    if (!name) return;
-    const created = await state.api.createUser(name);
-    state.activeUserId = created.user_id;
+if (el.createUserForm) {
+  el.createUserForm.onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const name = el.newUserName.value.trim();
+      if (!name) return;
+      const created = await state.api.createUser(name);
+      state.activeUserId = created.user_id;
+      state.isLoggedIn = true;
+      localStorage.setItem("active_user_id", state.activeUserId);
+      el.newUserName.value = "";
+      await loadUsers();
+      await Promise.all([loadTexts(), loadWords()]);
+      hideUserSelection();
+      switchView("library");
+    } catch (err) {
+      setStateMessage(el.usersState, String(err.message || err), true);
+    }
+  };
+}
+
+if (el.activeUser) {
+  el.activeUser.onchange = async () => {
+    state.activeUserId = el.activeUser.value;
     localStorage.setItem("active_user_id", state.activeUserId);
-    el.newUserName.value = "";
-    await loadUsers();
+    clearUserScopedViews();
+    state.wordsLimit = Number(el.wordsLimit?.value || 50);
     await Promise.all([loadTexts(), loadWords()]);
     if (state.activeView === "srs") {
       await loadSrsSession();
     }
-  } catch (err) {
-    setStateMessage(el.usersState, String(err.message || err), true);
-  }
-};
+  };
+}
 
-el.activeUser.onchange = async () => {
-  state.activeUserId = el.activeUser.value;
-  localStorage.setItem("active_user_id", state.activeUserId);
-  clearUserScopedViews();
-  state.wordsLimit = Number(el.wordsLimit.value);
-  await Promise.all([loadTexts(), loadWords()]);
-  if (state.activeView === "srs") {
-    await loadSrsSession();
-  }
-};
+if (el.createTextForm) {
+  el.createTextForm.onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      requireUser();
+      const title = el.newTextTitle.value.trim();
+      const content = el.newTextContent.value.trim();
+      if (!title || !content) return;
+      await state.api.createText(state.activeUserId, title, content);
+      el.newTextTitle.value = "";
+      el.newTextContent.value = "";
+      await loadTexts();
+    } catch (err) {
+      setStateMessage(el.textsState, String(err.message || err), true);
+    }
+  };
+}
 
-el.createTextForm.onsubmit = async (event) => {
-  event.preventDefault();
-  try {
-    requireUser();
-    const title = el.newTextTitle.value.trim();
-    const content = el.newTextContent.value.trim();
-    if (!title || !content) return;
-    await state.api.createText(state.activeUserId, title, content);
-    el.newTextTitle.value = "";
-    el.newTextContent.value = "";
-    await loadTexts();
-  } catch (err) {
-    setStateMessage(el.textsState, String(err.message || err), true);
-  }
-};
+if (el.prevSentence) {
+  el.prevSentence.onclick = async () => {
+    if (!el.prevSentence.dataset.target) return;
+    clearWordDetailsPanel();
+    state.sentenceIndex = Number(el.prevSentence.dataset.target);
+    await loadSentence();
+  };
+}
 
-el.prevSentence.onclick = async () => {
-  if (!el.prevSentence.dataset.target) return;
-  clearWordDetailsPanel();
-  state.sentenceIndex = Number(el.prevSentence.dataset.target);
-  await loadSentence();
-};
-
-el.nextSentence.onclick = async () => {
-  if (!el.nextSentence.dataset.target) return;
-  clearWordDetailsPanel();
-  state.sentenceIndex = Number(el.nextSentence.dataset.target);
-  await loadSentence();
-};
+if (el.nextSentence) {
+  el.nextSentence.onclick = async () => {
+    if (!el.nextSentence.dataset.target) return;
+    clearWordDetailsPanel();
+    state.sentenceIndex = Number(el.nextSentence.dataset.target);
+    await loadSentence();
+  };
+}
 
 el.mnemonicForm.onsubmit = async (event) => {
   event.preventDefault();
@@ -1658,14 +1946,30 @@ window.addEventListener("keydown", (event) => {
 });
 
 (async function bootstrap() {
-  el.wordsLimit.value = String(state.wordsLimit);
-  setActiveView(state.activeView, false);
+  if (el.wordsLimit) {
+    el.wordsLimit.value = String(state.wordsLimit);
+  }
   void renderBackupStatus();
+
+  // Load users first
   await loadUsers();
+
+  // Check if there's a logged-in user from localStorage
   if (state.activeUserId) {
+    state.isLoggedIn = true;
+    state.currentView = "library";
+    updateViewVisibility();
     await Promise.all([loadTexts(), loadWords()]);
-    if (state.activeView === "srs") {
-      await loadSrsSession();
-    }
+    hideUserSelection();
+  } else {
+    // No logged-in user, show the selection modal but keep library visible for user creation
+    state.isLoggedIn = false;
+    state.currentView = "library";
+    el.sectionLibrary.classList.add("active");
+    el.appHeader.classList.add("is-hidden");
+    el.sectionSrs.classList.remove("active");
+    el.sectionReader.classList.remove("active");
+    el.readerExitBtn.classList.remove("active");
+    showUserSelection();
   }
 })();

@@ -14,109 +14,97 @@
   </head>
   <body>
     <div class="bg-shape"></div>
-    <main class="app" data-testid="app-root">
-      <header class="shell-header">
-        <div class="shell-title">
-          <p class="eyebrow">Desktop Reading Studio</p>
-          <h1>Hebrew Reading Helper</h1>
-          <div class="shell-subtitle-row">
-            <p class="shell-subtitle">Desktop Hebrew reading workspace.</p>
-            <span id="backup-status" class="backup-status"></span>
-          </div>
-        </div>
-        <nav class="view-nav" aria-label="Primary views" role="tablist">
-          <button
-            id="view-library"
-            class="view-btn"
-            type="button"
-            data-view-target="library"
-            role="tab"
-            aria-controls="panel-library"
-            title="Library view"
-          >
-            Library
-          </button>
-          <button
-            id="view-reader"
-            class="view-btn"
-            type="button"
-            data-view-target="reader"
-            role="tab"
-            aria-controls="panel-reader"
-            title="Reader view"
-          >
-            Reader
-          </button>
-          <button
-            id="view-words"
-            class="view-btn"
-            type="button"
-            data-view-target="words"
-            role="tab"
-            aria-controls="panel-words"
-            title="Words view"
-          >
-            Words
-          </button>
-          <button
-            id="view-srs"
-            class="view-btn"
-            type="button"
-            data-view-target="srs"
-            role="tab"
-            aria-controls="panel-srs"
-            title="SRS view"
-          >
-            SRS
-          </button>
-        </nav>
-      </header>
 
-      <section id="panel-library-users" class="panel" data-view-panel="library">
-        <div class="panel-title-row">
-          <h2>Users</h2>
-          <div>
-            <label class="inline-label">
-              <input id="include-deleted" type="checkbox" />
-              Show deleted
-            </label>
-            <button id="refresh-users" type="button">Refresh</button>
+    <!-- Main app header with navigation -->
+    <header id="app-header" class="app-header">
+      <div class="nav-left">
+        <button id="nav-library" class="nav-button active" data-view="library">Library</button>
+        <button id="nav-srs" class="nav-button" data-view="srs">SRS</button>
+        <!-- Keep old view button IDs for backward compatibility with tests -->
+        <button id="view-library" style="display: none;" data-view-target="library"></button>
+        <button id="view-reader" style="display: none;" data-view-target="reader"></button>
+        <button id="view-words" style="display: none;" data-view-target="words"></button>
+        <button id="view-srs" style="display: none;" data-view-target="srs"></button>
+      </div>
+      <div class="nav-right">
+        <a href="#" id="logout-link" class="logout-link">Logout</a>
+      </div>
+    </header>
+
+    <!-- User selection modal -->
+    <div id="user-selection-modal" class="user-selection-modal is-hidden">
+      <div class="modal-box">
+        <h2>Select User</h2>
+        <label for="user-picker">Choose a user:</label>
+        <select id="user-picker"></select>
+        <button id="user-pick-confirm" type="button">Continue</button>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <main id="main-content" data-testid="app-root">
+      <!-- Library Section -->
+      <section id="section-library" class="view-section">
+        <div class="shell-header">
+          <div class="shell-title">
+            <p class="eyebrow">Desktop Reading Studio</p>
+            <h1>Hebrew Reading Helper</h1>
+            <div class="shell-subtitle-row">
+              <p class="shell-subtitle">Desktop Hebrew reading workspace.</p>
+              <span id="backup-status" class="backup-status"></span>
+            </div>
           </div>
         </div>
 
-        <form id="create-user-form" class="row-form">
-          <input id="new-user-name" required minlength="1" maxlength="100" placeholder="New user name" />
-          <button type="submit">Create User</button>
-        </form>
+        <!-- User Management Panel -->
+        <section id="panel-library-users" class="panel">
+          <div class="panel-title-row">
+            <h2>Users</h2>
+            <div>
+              <label class="inline-label">
+                <input id="include-deleted" type="checkbox" />
+                Show deleted
+              </label>
+              <button id="refresh-users" type="button">Refresh</button>
+            </div>
+          </div>
 
-        <label>
-          Active user
-          <select id="active-user"></select>
-        </label>
-        <div id="users-state" class="state" role="status" aria-live="polite"></div>
-        <ul id="users-list" class="list"></ul>
+          <form id="create-user-form" class="row-form">
+            <input id="new-user-name" required minlength="1" maxlength="100" placeholder="New user name" />
+            <button type="submit">Create User</button>
+          </form>
+
+          <label>
+            Active user
+            <select id="active-user"></select>
+          </label>
+          <div id="users-state" class="state" role="status" aria-live="polite"></div>
+          <ul id="users-list" class="list"></ul>
+        </section>
+
+        <!-- Library Grid Section -->
+        <section id="panel-library-grid" class="panel">
+          <div class="panel-title-row">
+            <h2>Texts</h2>
+            <button id="refresh-texts" type="button" title="Reload texts for the selected user">Refresh</button>
+          </div>
+          <form id="create-text-form" class="stack-form">
+            <input id="new-text-title" required minlength="1" maxlength="200" placeholder="Text title" />
+            <textarea
+              id="new-text-content"
+              required
+              minlength="1"
+              placeholder="Paste Hebrew text here. Sentences are split by periods."
+            ></textarea>
+            <button type="submit">Add Text</button>
+          </form>
+          <div id="texts-state" class="state" role="status" aria-live="polite"></div>
+          <div id="library-grid"></div>
+        </section>
       </section>
 
-      <section id="panel-library" class="panel" data-view-panel="library">
-        <div class="panel-title-row">
-          <h2>Texts</h2>
-          <button id="refresh-texts" type="button" title="Reload texts for the selected user">Refresh</button>
-        </div>
-        <form id="create-text-form" class="stack-form">
-          <input id="new-text-title" required minlength="1" maxlength="200" placeholder="Text title" />
-          <textarea
-            id="new-text-content"
-            required
-            minlength="1"
-            placeholder="Paste Hebrew text here. Sentences are split by periods."
-          ></textarea>
-          <button type="submit">Add Text</button>
-        </form>
-        <div id="texts-state" class="state" role="status" aria-live="polite"></div>
-        <ul id="texts-list" class="list"></ul>
-      </section>
-
-      <section id="panel-reader" class="panel" data-view-panel="reader">
+      <!-- Reader Section -->
+      <section id="section-reader" class="view-section">
         <div class="panel-title-row">
           <h2>Reader</h2>
           <span id="reader-meta" class="pill">No text open</span>
@@ -163,40 +151,8 @@
         </section>
       </section>
 
-      <section id="panel-words" class="panel" data-view-panel="words">
-        <div class="panel-title-row">
-          <h2>Words</h2>
-          <div>
-            <label>
-              Filter
-              <select id="words-filter">
-                <option value="all">All</option>
-                <option value="unknown">Unknown</option>
-                <option value="known">Known</option>
-                <option value="never_seen">Never Seen</option>
-              </select>
-            </label>
-            <label>
-              Limit
-              <select id="words-limit">
-                <option value="25">25</option>
-                <option value="50" selected>50</option>
-                <option value="100">100</option>
-              </select>
-            </label>
-            <button id="refresh-words" type="button">Refresh</button>
-          </div>
-        </div>
-        <div class="nav-row">
-          <button id="words-prev-page" type="button">Previous Page</button>
-          <span id="words-page-label" class="pill">Page 1</span>
-          <button id="words-next-page" type="button">Next Page</button>
-        </div>
-        <div id="words-state" class="state" role="status" aria-live="polite"></div>
-        <ul id="words-list" class="list"></ul>
-      </section>
-
-      <section id="panel-srs" class="panel" data-view-panel="srs">
+      <!-- SRS Section -->
+      <section id="section-srs" class="view-section">
         <div class="panel-title-row">
           <h2>SRS</h2>
           <span id="srs-meta" class="pill">No session loaded</span>
@@ -244,6 +200,10 @@
         </div>
       </section>
     </main>
+
+    <!-- Reader exit button -->
+    <button id="reader-exit-btn" class="reader-exit-btn" title="Exit Reader">← Library</button>
+
     <script type="module" src="/static/app.js"></script>
   </body>
 </html>

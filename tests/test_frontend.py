@@ -54,7 +54,7 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="add-meaning-form"' in html.text
     assert 'id="meanings-preview"' in html.text
     assert 'id="view-srs"' in html.text
-    assert 'id="panel-srs"' in html.text
+    assert 'id="section-srs"' in html.text
     assert 'id="srs-show"' in html.text
     assert 'id="srs-wrong"' in html.text
     assert 'id="srs-right"' in html.text
