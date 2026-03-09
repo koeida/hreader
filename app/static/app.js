@@ -302,6 +302,7 @@ function isCurrentRequest(key, version) {
 }
 
 function setStateMessage(node, text, isError = false) {
+  if (!node) return;
   node.textContent = text || "";
   node.classList.toggle("error", Boolean(isError));
   node.classList.toggle("loading", text === "Loading...");
@@ -309,6 +310,7 @@ function setStateMessage(node, text, isError = false) {
 }
 
 function renderListState(listNode, stateNode, options) {
+  if (!listNode || !stateNode) return true;
   const {
     loading = false,
     error = "",
@@ -423,12 +425,16 @@ async function renderUserPicker() {
 
 async function handleUserPick(userId) {
   if (!userId) return;
+  console.log("handleUserPick called with:", userId);
   state.activeUserId = userId;
   state.isLoggedIn = true;
   localStorage.setItem("active_user_id", userId);
   hideUserSelection();
+  console.log("Loading texts and words...");
   await Promise.all([loadTexts(), loadWords()]);
+  console.log("Switching to library view...");
   switchView("library");
+  console.log("Done");
 }
 
 function handleLogout() {
