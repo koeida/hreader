@@ -170,7 +170,15 @@ class ApiClient {
   getBackupStatus() {
     return this.request("/v1/backup/status", { method: "GET" });
   }
+
+  getProgressHistory(userId, range) {
+    return this.request(`/v1/users/${userId}/progress/history?range=${encodeURIComponent(range)}`, { method: "GET" });
+  }
 }
+
+// Percentage of words that are unique (not just variants with prefixes)
+// Calculated from corpus: 714 unique base words / 881 total = 81.04%
+const UNIQUE_WORD_ESTIMATE_PERCENT = 0.8104;
 
 const state = {
   api: new ApiClient(localStorage.getItem("api_base_url") || ""),
@@ -198,6 +206,9 @@ const state = {
   srsDailyNewRemaining: 0,
   srsAvailableNewCount: 0,
   srsDailyResetAt: "",
+  progressRange: "month",
+  progressShowUnique: false,
+  progressChart: null,
   requestVersion: {
     users: 0,
     texts: 0,
@@ -209,6 +220,7 @@ const state = {
     srsSession: 0,
     srsDetails: 0,
     srsReview: 0,
+    progressHistory: 0,
   },
 };
 
@@ -287,8 +299,17 @@ const el = {
   srsAddCount: document.getElementById("srs-add-count"),
   srsAddSubmit: document.getElementById("srs-add-submit"),
   srsCaughtUp: document.getElementById("srs-caught-up"),
-  srsStatsLink: document.getElementById("srs-stats-link"),
   backupStatus: document.getElementById("backup-status"),
+  navProgress: document.getElementById("nav-progress"),
+  sectionProgress: document.getElementById("section-progress"),
+  progressState: document.getElementById("progress-state"),
+  progressChartCanvas: document.getElementById("progress-chart"),
+  progressRangeBtns: [
+    document.getElementById("progress-range-month"),
+    document.getElementById("progress-range-year"),
+    document.getElementById("progress-range-all"),
+  ],
+  progressUniqueToggle: document.getElementById("progress-unique-toggle"),
 };
 const VIEW_ORDER = ["library", "reader", "words", "srs"];
 
@@ -376,6 +397,7 @@ function updateViewVisibility() {
   // Hide/show sections
   el.sectionLibrary.classList.toggle("active", loggedIn && v === "library");
   el.sectionSrs.classList.toggle("active", loggedIn && v === "srs");
+  el.sectionProgress.classList.toggle("active", loggedIn && v === "progress");
   el.sectionReader.classList.toggle("active", loggedIn && v === "reader");
 
   // Hide/show exit button
@@ -384,6 +406,7 @@ function updateViewVisibility() {
   // Update nav button active state
   if (el.navLibrary) el.navLibrary.classList.toggle("active", v === "library");
   if (el.navSrs) el.navSrs.classList.toggle("active", v === "srs");
+  if (el.navProgress) el.navProgress.classList.toggle("active", v === "progress");
 }
 
 function switchView(view) {
@@ -393,6 +416,9 @@ function switchView(view) {
   // Side effects
   if (view === "srs" && state.isLoggedIn) {
     void loadSrsSession();
+  }
+  if (view === "progress" && state.isLoggedIn) {
+    void loadProgressData();
   }
   if (view !== "reader") {
     clearWordDetailsPanel();
@@ -479,11 +505,12 @@ async function renderLibraryGrid() {
 
   grid.className = "";
   for (const text of state.texts) {
-    const progress = text.progress;
-    const knownPct = progress.known_percent;
-    const stage4Pct = progress.stage4_percent;
+    const progress = text.progress || {};
+    const knownPct = progress.known_percent ?? 0;
+    const stage4Pct = progress.stage4_percent ?? 0;
     const highestPct = Math.max(knownPct, stage4Pct);
     const bgColor = colorForPercentage(highestPct);
+    const totalWords = progress.total_words ?? (progress.known_count + progress.unknown_count + progress.never_seen_count) ?? 0;
 
     const widget = document.createElement("div");
     widget.className = "text-widget";
@@ -496,7 +523,7 @@ async function renderLibraryGrid() {
     const stats = document.createElement("div");
     stats.className = "text-widget__stats";
     stats.innerHTML = `
-      <div>Words: ${progress.total_words.toLocaleString()}</div>
+      <div>Words: ${totalWords.toLocaleString()}</div>
       <div>Known: ${knownPct.toFixed(1)}% | Stage 4+: ${stage4Pct.toFixed(1)}%</div>
     `;
 
@@ -687,6 +714,11 @@ function clearUserScopedViews() {
   el.wordsNextPage.disabled = true;
   clearWordDetailsPanel();
   clearSrsState();
+  state.progressRange = "month";
+  state.progressShowUnique = false;
+  if (el.progressUniqueToggle) el.progressUniqueToggle.checked = false;
+  if (state.progressChart) { state.progressChart.destroy(); state.progressChart = null; }
+  setStateMessage(el.progressState, "");
 }
 
 function clearSrsState() {
@@ -751,14 +783,15 @@ function renderSrs() {
   const remaining = state.srsDailyNewRemaining;
   el.srsMeta.textContent = `Due ${dueCount} | New available ${available} | Daily remaining ${remaining}`;
 
-  const isCaughtUp = !hasActiveCard && dueCount === 0 && available === 0;
-  const canAddNew = !hasActiveCard && dueCount === 0 && available > 0 && remaining > 0;
+  const isReviewingDone = !hasActiveCard && dueCount === 0;
+  const canAddNewCards = isReviewingDone && available > 0 && remaining > 0;
+  const isTrulyAllCaughtUp = isReviewingDone && available === 0;
 
-  el.srsReviewer.classList.toggle("is-hidden", !hasActiveCard || isCaughtUp);
-  el.srsAddNew.classList.toggle("is-hidden", !canAddNew);
-  el.srsCaughtUp.classList.toggle("is-hidden", !isCaughtUp);
-  el.srsMeta.hidden = isCaughtUp;
-  el.srsState.hidden = isCaughtUp;
+  el.srsReviewer.classList.toggle("is-hidden", !hasActiveCard);
+  el.srsAddNew.classList.toggle("is-hidden", !canAddNewCards);
+  el.srsCaughtUp.classList.toggle("is-hidden", !isTrulyAllCaughtUp);
+  el.srsMeta.hidden = !hasActiveCard;
+  el.srsState.hidden = !hasActiveCard;
 
   if (!hasActiveCard) {
     if (available > 0 && remaining <= 0) {
@@ -877,6 +910,27 @@ async function submitSrsResult(result) {
       return;
     }
     setStateMessage(el.srsState, `Review failed: ${String(err.message || err)}`, true);
+  }
+}
+
+async function loadProgressData() {
+  const requestVersion = nextRequestVersion("progressHistory");
+  if (!state.activeUserId) {
+    setStateMessage(el.progressState, "Select a user first");
+    return;
+  }
+  setStateMessage(el.progressState, "Loading...");
+  try {
+    const data = await state.api.getProgressHistory(state.activeUserId, state.progressRange);
+    if (!isCurrentRequest("progressHistory", requestVersion)) {
+      return;
+    }
+    renderProgressChart(data);
+  } catch (err) {
+    if (!isCurrentRequest("progressHistory", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.progressState, String(err.message || err), true);
   }
 }
 
@@ -1371,6 +1425,70 @@ function renderWordDetails(data) {
   setStateMessage(el.mnemonicState, "");
 }
 
+function renderProgressChart(data) {
+  const labels = data.buckets.map(b => b.date);
+  let knownData = data.buckets.map(b => b.cumulative_known);
+  const encounterData = data.buckets.map(b => b.cumulative_encountered);
+
+  // Apply unique word estimate if toggled
+  if (state.progressShowUnique) {
+    knownData = knownData.map(k => Math.round(k * UNIQUE_WORD_ESTIMATE_PERCENT));
+  }
+
+  const knownLabel = state.progressShowUnique ? "Known Words (Unique Est.)" : "Known Words";
+  const ctx = el.progressChartCanvas.getContext("2d");
+
+  if (state.progressChart) {
+    state.progressChart.data.labels = labels;
+    state.progressChart.data.datasets[0].label = knownLabel;
+    state.progressChart.data.datasets[0].data = knownData;
+    state.progressChart.data.datasets[1].data = encounterData;
+    state.progressChart.update();
+  } else {
+    state.progressChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: knownLabel,
+            data: knownData,
+            borderColor: "#22c55e",
+            backgroundColor: "rgba(34, 197, 94, 0.1)",
+            fill: "origin",
+            tension: 0.3,
+          },
+          {
+            label: "Encountered Words",
+            data: encounterData,
+            borderColor: "#9ca3af",
+            backgroundColor: "rgba(156, 163, 175, 0.05)",
+            fill: "-1",
+            tension: 0.3,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            display: true,
+            position: "top",
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            stacked: false,
+          },
+        },
+      },
+    });
+  }
+  setStateMessage(el.progressState, "");
+}
+
 async function renderBackupStatus() {
   try {
     const data = await state.api.getBackupStatus();
@@ -1623,6 +1741,27 @@ if (el.navLibrary) {
 if (el.navSrs) {
   el.navSrs.onclick = () => {
     switchView("srs");
+  };
+}
+
+if (el.navProgress) {
+  el.navProgress.onclick = () => {
+    switchView("progress");
+  };
+}
+
+for (const btn of el.progressRangeBtns) {
+  btn.onclick = () => {
+    state.progressRange = btn.dataset.range;
+    el.progressRangeBtns.forEach(b => b.classList.toggle("active", b === btn));
+    void loadProgressData();
+  };
+}
+
+if (el.progressUniqueToggle) {
+  el.progressUniqueToggle.onchange = () => {
+    state.progressShowUnique = el.progressUniqueToggle.checked;
+    void loadProgressData();
   };
 }
 
@@ -1913,11 +2052,6 @@ el.srsMnemonicForm.onsubmit = async (event) => {
     el.srsMnemonicSave.disabled = false;
     el.srsMnemonicSave.textContent = previousText || "Save Mnemonic";
   }
-};
-
-el.srsStatsLink.onclick = (event) => {
-  event.preventDefault();
-  setStateMessage(el.srsState, "Stats view is not implemented yet");
 };
 
 window.addEventListener("keydown", (event) => {

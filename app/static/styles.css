@@ -373,6 +373,8 @@ body {
 /* SRS Section */
 #section-srs {
   padding: 24px;
+  max-width: 700px;
+  margin: 0 auto;
 }
 
 /* Typography and Base Styles */
@@ -757,4 +759,53 @@ textarea:focus-visible {
 
 .app.view-srs {
   /* Placeholder for backward compat */
+}
+
+/* Progress View */
+#section-progress {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.progress-chart-wrap {
+  margin-top: 1rem;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.2rem;
+}
+
+.progress-controls {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.progress-range-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.range-btn {
+  background: #e3ecff;
+  border: 1px solid #bbcefb;
+  color: #15397f;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 140ms ease;
+}
+
+.range-btn:hover {
+  background: #d4e1f7;
+}
+
+.range-btn.active {
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+  border-color: #0039ab;
+  color: #fff;
 }

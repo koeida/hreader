@@ -20,6 +20,7 @@
       <div class="nav-left">
         <button id="nav-library" class="nav-button active" data-view="library">Library</button>
         <button id="nav-srs" class="nav-button" data-view="srs">SRS</button>
+        <button id="nav-progress" class="nav-button" data-view="progress">Progress</button>
         <!-- Keep old view button IDs for backward compatibility with tests -->
         <button id="view-library" style="display: none;" data-view-target="library"></button>
         <button id="view-reader" style="display: none;" data-view-target="reader"></button>
@@ -196,7 +197,28 @@
 
         <div id="srs-caught-up" class="srs-caught-up is-hidden">
           <p>All caught up.</p>
-          <a href="#" id="srs-stats-link">Open stats (coming soon)</a>
+        </div>
+      </section>
+
+      <!-- Progress Section -->
+      <section id="section-progress" class="view-section">
+        <div class="panel-title-row">
+          <h2>Vocabulary Progress</h2>
+          <div class="progress-controls">
+            <div class="progress-range-toggle">
+              <button id="progress-range-month" class="range-btn active" data-range="month">Last Month</button>
+              <button id="progress-range-year"  class="range-btn"        data-range="year">Last Year</button>
+              <button id="progress-range-all"   class="range-btn"        data-range="all">All Time</button>
+            </div>
+            <label class="inline-label">
+              <input id="progress-unique-toggle" type="checkbox" />
+              Estimated unique words
+            </label>
+          </div>
+        </div>
+        <div id="progress-state" class="state" role="status" aria-live="polite"></div>
+        <div class="progress-chart-wrap">
+          <canvas id="progress-chart"></canvas>
         </div>
       </section>
     </main>
@@ -204,6 +226,7 @@
     <!-- Reader exit button -->
     <button id="reader-exit-btn" class="reader-exit-btn" title="Exit Reader">← Library</button>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script type="module" src="/static/app.js"></script>
   </body>
 </html>

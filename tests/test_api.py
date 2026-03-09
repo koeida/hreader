@@ -680,3 +680,32 @@ def test_backup_status_transitions_to_ok(tmp_path):
     data = status_resp.json()
     assert data["status"] == "ok"
     assert data["last_backup_date"] == date.today().isoformat()
+
+
+def test_progress_history_endpoint_exists_and_returns_data(tmp_path: Path) -> None:
+    """Progress history endpoint should exist and return buckets for all ranges."""
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        text_id = create_text(client, user_id, "Test", "שלום עולם. זה טיפוס.")
+
+        # Load sentences to populate user_words
+        client.get(f"/v1/users/{user_id}/texts/{text_id}/sentences/0")
+
+        # Test all valid ranges
+        for range_val in ("month", "year", "all"):
+            resp = client.get(f"/v1/users/{user_id}/progress/history?range={range_val}")
+            assert resp.status_code == 200, f"Range {range_val} failed: {resp.text}"
+            data = resp.json()
+            assert "range" in data
+            assert data["range"] == range_val
+            assert "buckets" in data
+            assert isinstance(data["buckets"], list)
+            # Each bucket should have date and cumulative counts
+            for bucket in data["buckets"]:
+                assert "date" in bucket
+                assert "cumulative_known" in bucket
+                assert "cumulative_encountered" in bucket
+
+        # Invalid range should return 400
+        resp = client.get(f"/v1/users/{user_id}/progress/history?range=invalid")
+        assert resp.status_code == 400

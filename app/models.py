@@ -208,3 +208,14 @@ class WordListFilter(BaseModel):
         if value < 1 or value > 200:
             raise ValueError("limit must be between 1 and 200")
         return value
+
+
+class ProgressBucket(BaseModel):
+    date: str
+    cumulative_known: int
+    cumulative_encountered: int
+
+
+class ProgressHistoryResponse(BaseModel):
+    range: str
+    buckets: list[ProgressBucket]

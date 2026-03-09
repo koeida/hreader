@@ -23,6 +23,8 @@ from app.models import (
     MeaningsListResponse,
     MeaningResponse,
     MeaningUpdateRequest,
+    ProgressBucket,
+    ProgressHistoryResponse,
     SentenceResponse,
     SentenceTokenResponse,
     SrsCardResponse,
@@ -52,6 +54,12 @@ from app.tokenizer import NIKKUD_RE, normalize_token, tokenize_eligible
 
 SRS_DAILY_NEW_CAP = 20
 SRS_INTERVAL_DAYS = [1, 2, 4, 7, 12, 21, 35, 56]
+
+# Percentage of words that are unique (not just variants with prefixes)
+# Calculated from Keegan's wordbank: 714 unique base words / 881 total words = 81.04%
+# Strips common Hebrew prefixes: ו ב ל ש כ ה
+# Used to estimate "unique known words" on progress page
+UNIQUE_WORD_ESTIMATE_PERCENT = 0.8104
 
 
 def to_iso_utc(value: datetime) -> str:
@@ -149,6 +157,86 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
         stage4_percent=stage4_percent,
         total_words=total,
     )
+
+
+def _bucket_progress_history(rows: list[Any], range_key: str) -> list[ProgressBucket]:
+    """Generate progress history buckets from user_words rows."""
+    events: list[tuple[date, str]] = []
+
+    for row in rows:
+        created_at_str = row["created_at"]
+        created_date = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).date()
+        events.append((created_date, "encountered"))
+
+        if row["state"] == "known" and row["updated_at"]:
+            updated_at_str = row["updated_at"]
+            updated_date = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00")).date()
+            events.append((updated_date, "known"))
+
+    if not events:
+        return []
+
+    today = datetime.now(UTC).date()
+
+    if range_key == "month":
+        bucket_keys: list[str] = []
+        for i in range(29, -1, -1):
+            d = today - timedelta(days=i)
+            bucket_keys.append(d.isoformat())
+    elif range_key == "year":
+        bucket_keys = []
+        for i in range(51, -1, -1):
+            d = today - timedelta(weeks=i)
+            d_monday = d - timedelta(days=d.weekday())
+            week_key = f"{d_monday.isocalendar().year}-W{d_monday.isocalendar().week:02d}"
+            if not bucket_keys or bucket_keys[-1] != week_key:
+                bucket_keys.append(week_key)
+    else:
+        min_event_date = min(e[0] for e in events)
+        bucket_keys = []
+        d = min_event_date.replace(day=1)
+        while d <= today and len(bucket_keys) < 120:
+            bucket_keys.append(d.isoformat()[:7])
+            if d.month == 12:
+                d = d.replace(year=d.year + 1, month=1)
+            else:
+                d = d.replace(month=d.month + 1)
+
+    bucket_counts: dict[str, dict[str, int]] = {}
+    for key in bucket_keys:
+        bucket_counts[key] = {"encountered": 0, "known": 0}
+
+    for event_date, event_type in events:
+        if range_key == "month":
+            key = event_date.isoformat()
+        elif range_key == "year":
+            d_monday = event_date - timedelta(days=event_date.weekday())
+            key = f"{d_monday.isocalendar().year}-W{d_monday.isocalendar().week:02d}"
+        else:
+            key = event_date.isoformat()[:7]
+
+        if key in bucket_counts:
+            if event_type == "encountered":
+                bucket_counts[key]["encountered"] += 1
+            elif event_type == "known":
+                bucket_counts[key]["known"] += 1
+
+    cumulative_encountered = 0
+    cumulative_known = 0
+    result: list[ProgressBucket] = []
+
+    for key in bucket_keys:
+        cumulative_encountered += bucket_counts[key]["encountered"]
+        cumulative_known += bucket_counts[key]["known"]
+        result.append(
+            ProgressBucket(
+                date=key,
+                cumulative_encountered=cumulative_encountered,
+                cumulative_known=cumulative_known,
+            )
+        )
+
+    return result
 
 
 def ensure_active_user(conn: Any, user_id: str) -> None:
@@ -1191,6 +1279,22 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             (user_id, normalized),
         ).fetchone()
         return row_to_word_details(row, user_id, normalized)
+
+    @app.get("/v1/users/{user_id}/progress/history", response_model=ProgressHistoryResponse)
+    def progress_history(
+        user_id: str,
+        range: str = Query(default="month"),
+        conn: Any = Depends(get_conn),
+    ) -> ProgressHistoryResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        if range not in ("month", "year", "all"):
+            raise HTTPException(status_code=400, detail="invalid_range")
+        rows = conn.execute(
+            "SELECT state, created_at, updated_at FROM user_words WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        return ProgressHistoryResponse(range=range, buckets=_bucket_progress_history(rows, range))
 
     return app
 
