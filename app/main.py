@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.backup import BACKUP_DIR, prune_old_backups, run_backup
 from app.db import DEFAULT_DB_PATH, get_connection, init_db
+from app.languages import validate_language
 from app.meanings import MeaningGenerationError, MeaningGenerator, normalize_english_meaning_text
 from app.models import (
     HealthResponse,
@@ -88,7 +89,7 @@ def ensure_uuid(value: str, field_name: str) -> str:
     return value
 
 
-def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
+def parse_progress(conn: Any, user_id: str, text_id: str, language: str = "hebrew") -> TextProgress:
     rows = conn.execute(
         "SELECT sentence_text FROM text_sentences WHERE text_id = ? ORDER BY sentence_index ASC",
         (text_id,),
@@ -96,7 +97,7 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
 
     unique_words: set[str] = set()
     for row in rows:
-        for token in tokenize_eligible(row["sentence_text"]):
+        for token in tokenize_eligible(row["sentence_text"], language):
             unique_words.add(token.normalized_word)
 
     if not unique_words:
@@ -114,9 +115,9 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
         f"""
         SELECT normalized_word, state
         FROM user_words
-        WHERE user_id = ? AND normalized_word IN ({placeholders})
+        WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders})
         """,
-        (user_id, *sorted(unique_words)),
+        (user_id, language, *sorted(unique_words)),
     ).fetchall()
     state_map = {row["normalized_word"]: row["state"] for row in state_rows}
 
@@ -125,9 +126,9 @@ def parse_progress(conn: Any, user_id: str, text_id: str) -> TextProgress:
         f"""
         SELECT normalized_word
         FROM srs_cards
-        WHERE user_id = ? AND normalized_word IN ({placeholders}) AND stage_index >= 4
+        WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders}) AND stage_index >= 4
         """,
-        (user_id, *sorted(unique_words)),
+        (user_id, language, *sorted(unique_words)),
     ).fetchall()
     stage4_set = {row["normalized_word"] for row in stage4_rows}
 
@@ -311,7 +312,7 @@ def ensure_active_user(conn: Any, user_id: str) -> None:
 def ensure_user_text(conn: Any, user_id: str, text_id: str) -> Any:
     row = conn.execute(
         """
-        SELECT text_id, user_id, title, content, created_at, updated_at
+        SELECT text_id, user_id, title, content, language, created_at, updated_at
         FROM texts
         WHERE text_id = ? AND user_id = ?
         """,
@@ -335,6 +336,7 @@ def row_to_user(row: Any) -> UserResponse:
 def row_to_word(row: Any) -> WordStateResponse:
     return WordStateResponse(
         user_id=row["user_id"],
+        language=row["language"],
         normalized_word=row["normalized_word"],
         state=row["state"],
         created_at=row["created_at"],
@@ -412,6 +414,7 @@ def row_to_srs_card(row: Any) -> SrsCardResponse:
 def row_to_srs_card_with_display(row: Any, display_word: str) -> SrsCardResponse:
     return SrsCardResponse(
         user_id=row["user_id"],
+        language=row["language"],
         normalized_word=row["normalized_word"],
         display_word=display_word,
         is_new=bool(row["is_new"]),
@@ -425,10 +428,14 @@ def row_to_srs_card_with_display(row: Any, display_word: str) -> SrsCardResponse
     )
 
 
-def resolve_srs_display_words(conn: Any, user_id: str, normalized_words: list[str]) -> dict[str, str]:
+def resolve_srs_display_words(conn: Any, user_id: str, normalized_words: list[str], language: str = "hebrew") -> dict[str, str]:
     targets = {word for word in normalized_words if word}
     if not targets:
         return {}
+
+    # For Latin, display word is same as normalized word
+    if language != "hebrew":
+        return {w: w for w in normalized_words}
 
     display_map: dict[str, str] = {}
     has_nikkud_map: dict[str, bool] = {}
@@ -437,17 +444,17 @@ def resolve_srs_display_words(conn: Any, user_id: str, normalized_words: list[st
         SELECT ts.sentence_text
         FROM text_sentences ts
         JOIN texts t ON t.text_id = ts.text_id
-        WHERE t.user_id = ?
+        WHERE t.user_id = ? AND t.language = ?
         ORDER BY t.created_at ASC, ts.sentence_index ASC
         """,
-        (user_id,),
+        (user_id, language),
     ).fetchall()
 
     for row in rows:
         if len(display_map) == len(targets) and all(has_nikkud_map.get(w, False) for w in targets):
             break
         sentence_text = row["sentence_text"]
-        for token in tokenize_eligible(sentence_text):
+        for token in tokenize_eligible(sentence_text, language):
             normalized = token.normalized_word
             if normalized not in targets:
                 continue
@@ -464,59 +471,59 @@ def resolve_srs_display_words(conn: Any, user_id: str, normalized_words: list[st
     return {word: display_map.get(word, word) for word in normalized_words}
 
 
-def get_daily_new_count(conn: Any, user_id: str, window_start_at: str) -> int:
+def get_daily_new_count(conn: Any, user_id: str, window_start_at: str, language: str = "hebrew") -> int:
     row = conn.execute(
         """
         SELECT new_count
         FROM srs_daily_new_counts
-        WHERE user_id = ? AND window_start_at = ?
+        WHERE user_id = ? AND language = ? AND window_start_at = ?
         """,
-        (user_id, window_start_at),
+        (user_id, language, window_start_at),
     ).fetchone()
     return int(row["new_count"]) if row else 0
 
 
-def increment_daily_new_count(conn: Any, user_id: str, window_start_at: str, count: int) -> None:
+def increment_daily_new_count(conn: Any, user_id: str, window_start_at: str, count: int, language: str = "hebrew") -> None:
     conn.execute(
         """
-        INSERT INTO srs_daily_new_counts (user_id, window_start_at, new_count)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, window_start_at)
+        INSERT INTO srs_daily_new_counts (user_id, language, window_start_at, new_count)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, language, window_start_at)
         DO UPDATE SET new_count = new_count + excluded.new_count
         """,
-        (user_id, window_start_at, count),
+        (user_id, language, window_start_at, count),
     )
 
 
-def ensure_srs_cards_for_unknown_words(conn: Any, user_id: str) -> None:
+def ensure_srs_cards_for_unknown_words(conn: Any, user_id: str, language: str = "hebrew") -> None:
     now = utc_now_iso()
     conn.execute(
         """
         INSERT INTO srs_cards (
-            user_id, normalized_word, is_new, is_introduced, stage_index, due_at,
+            user_id, language, normalized_word, is_new, is_introduced, stage_index, due_at,
             introduced_at, last_reviewed_at, created_at, updated_at
         )
-        SELECT uw.user_id, uw.normalized_word, 1, 0, 0, ?, NULL, NULL, ?, ?
+        SELECT uw.user_id, uw.language, uw.normalized_word, 1, 0, 0, ?, NULL, NULL, ?, ?
         FROM user_words uw
         LEFT JOIN srs_cards sc
-          ON sc.user_id = uw.user_id AND sc.normalized_word = uw.normalized_word
-        WHERE uw.user_id = ? AND uw.state = 'unknown' AND sc.normalized_word IS NULL
+          ON sc.user_id = uw.user_id AND sc.language = uw.language AND sc.normalized_word = uw.normalized_word
+        WHERE uw.user_id = ? AND uw.language = ? AND uw.state = 'unknown' AND sc.normalized_word IS NULL
         """,
-        (now, now, now, user_id),
+        (now, now, now, user_id, language),
     )
     conn.commit()
 
 
-def _sync_srs_card(conn: Any, user_id: str, normalized: str, state: str, now: str) -> None:
+def _sync_srs_card(conn: Any, user_id: str, normalized: str, state: str, now: str, language: str = "hebrew") -> None:
     if state == "unknown":
         conn.execute(
             """
             INSERT INTO srs_cards (
-                user_id, normalized_word, is_new, is_introduced, stage_index, due_at,
+                user_id, language, normalized_word, is_new, is_introduced, stage_index, due_at,
                 introduced_at, last_reviewed_at, created_at, updated_at
             )
-            VALUES (?, ?, 1, 0, 0, ?, NULL, NULL, ?, ?)
-            ON CONFLICT(user_id, normalized_word)
+            VALUES (?, ?, ?, 1, 0, 0, ?, NULL, NULL, ?, ?)
+            ON CONFLICT(user_id, language, normalized_word)
             DO UPDATE SET
                 is_new = 1,
                 is_introduced = 0,
@@ -525,12 +532,12 @@ def _sync_srs_card(conn: Any, user_id: str, normalized: str, state: str, now: st
                 introduced_at = NULL,
                 updated_at = excluded.updated_at
             """,
-            (user_id, normalized, now, now, now),
+            (user_id, language, normalized, now, now, now),
         )
     else:
         conn.execute(
-            "DELETE FROM srs_cards WHERE user_id = ? AND normalized_word = ?",
-            (user_id, normalized),
+            "DELETE FROM srs_cards WHERE user_id = ? AND language = ? AND normalized_word = ?",
+            (user_id, language, normalized),
         )
 
 
@@ -669,11 +676,15 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     def create_text(user_id: str, payload: TextCreateRequest, conn: Any = Depends(get_conn)) -> TextResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(payload.language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
         text_id = str(uuid4())
         now = utc_now_iso()
         conn.execute(
-            "INSERT INTO texts (text_id, user_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (text_id, user_id, payload.title.strip(), payload.content, now, now),
+            "INSERT INTO texts (text_id, user_id, title, content, language, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (text_id, user_id, payload.title.strip(), payload.content, language, now, now),
         )
         for i, sentence in enumerate(split_sentences(payload.content)):
             conn.execute(
@@ -687,16 +698,24 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             title=payload.title.strip(),
             created_at=now,
             updated_at=now,
-            progress=parse_progress(conn, user_id, text_id),
+            progress=parse_progress(conn, user_id, text_id, language),
         )
 
     @app.get("/v1/users/{user_id}/texts", response_model=TextListResponse)
-    def list_texts(user_id: str, conn: Any = Depends(get_conn)) -> TextListResponse:
+    def list_texts(
+        user_id: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> TextListResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
         rows = conn.execute(
-            "SELECT text_id, user_id, title, created_at, updated_at FROM texts WHERE user_id = ? ORDER BY created_at ASC",
-            (user_id,),
+            "SELECT text_id, user_id, title, language, created_at, updated_at FROM texts WHERE user_id = ? AND language = ? ORDER BY created_at ASC",
+            (user_id, language),
         ).fetchall()
         items = [
             TextResponse(
@@ -705,7 +724,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 title=row["title"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
-                progress=parse_progress(conn, user_id, row["text_id"]),
+                progress=parse_progress(conn, user_id, row["text_id"], language),
             )
             for row in rows
         ]
@@ -717,13 +736,14 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         text_id = ensure_uuid(text_id, "text_id")
         ensure_active_user(conn, user_id)
         row = ensure_user_text(conn, user_id, text_id)
+        text_language = row["language"] if "language" in row.keys() else "hebrew"
         return TextResponse(
             text_id=row["text_id"],
             user_id=row["user_id"],
             title=row["title"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
-            progress=parse_progress(conn, user_id, text_id),
+            progress=parse_progress(conn, user_id, text_id, text_language),
         )
 
     @app.get("/v1/users/{user_id}/texts/{text_id}/position", response_model=TextPositionResponse)
@@ -787,13 +807,14 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         )
         conn.commit()
         updated = ensure_user_text(conn, user_id, text_id)
+        updated_language = updated["language"] if "language" in updated.keys() else "hebrew"
         return TextResponse(
             text_id=updated["text_id"],
             user_id=updated["user_id"],
             title=updated["title"],
             created_at=updated["created_at"],
             updated_at=updated["updated_at"],
-            progress=parse_progress(conn, user_id, text_id),
+            progress=parse_progress(conn, user_id, text_id, updated_language),
         )
 
     @app.delete("/v1/users/{user_id}/texts/{text_id}")
@@ -811,7 +832,8 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         user_id = ensure_uuid(user_id, "user_id")
         text_id = ensure_uuid(text_id, "text_id")
         ensure_active_user(conn, user_id)
-        ensure_user_text(conn, user_id, text_id)
+        text_row = ensure_user_text(conn, user_id, text_id)
+        text_language = text_row["language"] if "language" in text_row.keys() else "hebrew"
 
         if sentence_index < 0:
             raise HTTPException(status_code=404, detail="sentence_not_found")
@@ -824,7 +846,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             raise HTTPException(status_code=404, detail="sentence_not_found")
 
         sentence_text = row["sentence_text"]
-        tokens = tokenize_eligible(sentence_text)
+        tokens = tokenize_eligible(sentence_text, text_language)
 
         now = utc_now_iso()
         conn.execute(
@@ -838,18 +860,18 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         for normalized_word in missing:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO user_words (user_id, normalized_word, state, created_at, updated_at)
-                VALUES (?, ?, 'never_seen', ?, ?)
+                INSERT OR IGNORE INTO user_words (user_id, language, normalized_word, state, created_at, updated_at)
+                VALUES (?, ?, ?, 'never_seen', ?, ?)
                 """,
-                (user_id, normalized_word, now, now),
+                (user_id, text_language, normalized_word, now, now),
             )
         conn.commit()
 
         if missing:
             placeholders = ",".join("?" for _ in missing)
             state_rows = conn.execute(
-                f"SELECT normalized_word, state FROM user_words WHERE user_id = ? AND normalized_word IN ({placeholders})",
-                (user_id, *missing),
+                f"SELECT normalized_word, state FROM user_words WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders})",
+                (user_id, text_language, *missing),
             ).fetchall()
             state_map = {r["normalized_word"]: r["state"] for r in state_rows}
         else:
@@ -884,45 +906,50 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         user_id: str,
         normalized_word: str,
         payload: WordStateUpdateRequest,
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> WordStateResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
 
-        normalized = normalize_token(normalized_word)
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
         existing = conn.execute(
-            "SELECT * FROM user_words WHERE user_id = ? AND normalized_word = ?",
-            (user_id, normalized),
+            "SELECT * FROM user_words WHERE user_id = ? AND language = ? AND normalized_word = ?",
+            (user_id, language, normalized),
         ).fetchone()
 
         if not existing:
             now = utc_now_iso()
             conn.execute(
-                "INSERT INTO user_words (user_id, normalized_word, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                (user_id, normalized, payload.state, now, now),
+                "INSERT INTO user_words (user_id, language, normalized_word, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, language, normalized, payload.state, now, now),
             )
-            _sync_srs_card(conn, user_id, normalized, payload.state, now)
+            _sync_srs_card(conn, user_id, normalized, payload.state, now, language)
             conn.commit()
             row = conn.execute(
-                "SELECT * FROM user_words WHERE user_id = ? AND normalized_word = ?",
-                (user_id, normalized),
+                "SELECT * FROM user_words WHERE user_id = ? AND language = ? AND normalized_word = ?",
+                (user_id, language, normalized),
             ).fetchone()
             return row_to_word(row)
 
         if existing["state"] != payload.state:
             now = utc_now_iso()
             conn.execute(
-                "UPDATE user_words SET state = ?, updated_at = ? WHERE user_id = ? AND normalized_word = ?",
-                (payload.state, now, user_id, normalized),
+                "UPDATE user_words SET state = ?, updated_at = ? WHERE user_id = ? AND language = ? AND normalized_word = ?",
+                (payload.state, now, user_id, language, normalized),
             )
-            _sync_srs_card(conn, user_id, normalized, payload.state, now)
+            _sync_srs_card(conn, user_id, normalized, payload.state, now, language)
             conn.commit()
             existing = conn.execute(
-                "SELECT * FROM user_words WHERE user_id = ? AND normalized_word = ?",
-                (user_id, normalized),
+                "SELECT * FROM user_words WHERE user_id = ? AND language = ? AND normalized_word = ?",
+                (user_id, language, normalized),
             ).fetchone()
 
         return row_to_word(existing)
@@ -933,18 +960,23 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         state: str = Query(default="all"),
         page: int = Query(default=1),
         limit: int = Query(default=50),
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> WordsListResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
 
         try:
             f = WordListFilter(state=state, page=page, limit=limit)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"invalid_pagination_or_filter: {exc}") from exc
 
-        where = "WHERE user_id = ?"
-        params: list[Any] = [user_id]
+        where = "WHERE user_id = ? AND language = ?"
+        params: list[Any] = [user_id, language]
         if f.state != "all":
             where += " AND state = ?"
             params.append(f.state)
@@ -975,11 +1007,16 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     def get_srs_session(
         user_id: str,
         timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> SrsSessionResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        ensure_srs_cards_for_unknown_words(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        ensure_srs_cards_for_unknown_words(conn, user_id, language)
 
         now = datetime.now(UTC)
         window_start_utc, window_end_utc = srs_window_bounds(now, timezone_offset_minutes)
@@ -989,12 +1026,12 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND is_introduced = 1 AND due_at >= ? AND due_at < ?
+            WHERE user_id = ? AND language = ? AND is_introduced = 1 AND due_at >= ? AND due_at < ?
             """,
-            (user_id, window_start_iso, window_end_iso),
+            (user_id, language, window_start_iso, window_end_iso),
         ).fetchall()
         due_word_order = [row["normalized_word"] for row in due_rows]
-        due_display_words = resolve_srs_display_words(conn, user_id, due_word_order)
+        due_display_words = resolve_srs_display_words(conn, user_id, due_word_order, language)
         due_cards = [
             row_to_srs_card_with_display(row, due_display_words.get(row["normalized_word"], row["normalized_word"]))
             for row in due_rows
@@ -1005,11 +1042,11 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT COUNT(*) AS total
             FROM srs_cards
-            WHERE user_id = ? AND is_new = 1 AND is_introduced = 0
+            WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0
             """,
-            (user_id,),
+            (user_id, language),
         ).fetchone()["total"]
-        used = get_daily_new_count(conn, user_id, window_start_iso)
+        used = get_daily_new_count(conn, user_id, window_start_iso, language)
         daily_new_remaining = max(0, SRS_DAILY_NEW_CAP - used)
         return SrsSessionResponse(
             due_cards=due_cards,
@@ -1026,13 +1063,17 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     ) -> SrsSessionAddNewResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        ensure_srs_cards_for_unknown_words(conn, user_id)
+        try:
+            language = validate_language(payload.language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        ensure_srs_cards_for_unknown_words(conn, user_id, language)
 
         now = datetime.now(UTC)
         now_iso = to_iso_utc(now)
         window_start_utc, window_end_utc = srs_window_bounds(now, payload.timezone_offset_minutes)
         window_start_iso = to_iso_utc(window_start_utc)
-        used = get_daily_new_count(conn, user_id, window_start_iso)
+        used = get_daily_new_count(conn, user_id, window_start_iso, language)
         cap_remaining = max(0, SRS_DAILY_NEW_CAP - used)
         target = min(payload.count, cap_remaining)
 
@@ -1042,11 +1083,11 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 """
                 SELECT *
                 FROM srs_cards
-                WHERE user_id = ? AND is_new = 1 AND is_introduced = 0
+                WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0
                 ORDER BY created_at ASC, normalized_word ASC
                 LIMIT ?
                 """,
-                (user_id, target),
+                (user_id, language, target),
             ).fetchall()
 
         selected_words = [row["normalized_word"] for row in selected_rows]
@@ -1056,22 +1097,22 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 f"""
                 UPDATE srs_cards
                 SET is_new = 0, is_introduced = 1, introduced_at = ?, updated_at = ?
-                WHERE user_id = ? AND normalized_word IN ({placeholders})
+                WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders})
                 """,
-                (now_iso, now_iso, user_id, *selected_words),
+                (now_iso, now_iso, user_id, language, *selected_words),
             )
-            increment_daily_new_count(conn, user_id, window_start_iso, len(selected_words))
+            increment_daily_new_count(conn, user_id, window_start_iso, len(selected_words), language)
             conn.commit()
             updated_rows = conn.execute(
                 f"""
                 SELECT *
                 FROM srs_cards
-                WHERE user_id = ? AND normalized_word IN ({placeholders})
+                WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders})
                 """,
-                (user_id, *selected_words),
+                (user_id, language, *selected_words),
             ).fetchall()
             added_word_order = [row["normalized_word"] for row in updated_rows]
-            added_display_words = resolve_srs_display_words(conn, user_id, added_word_order)
+            added_display_words = resolve_srs_display_words(conn, user_id, added_word_order, language)
             added_cards = [
                 row_to_srs_card_with_display(row, added_display_words.get(row["normalized_word"], row["normalized_word"]))
                 for row in updated_rows
@@ -1085,9 +1126,9 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT COUNT(*) AS total
             FROM srs_cards
-            WHERE user_id = ? AND is_new = 1 AND is_introduced = 0
+            WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0
             """,
-            (user_id,),
+            (user_id, language),
         ).fetchone()["total"]
 
         return SrsSessionAddNewResponse(
@@ -1105,7 +1146,11 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     ) -> SrsReviewResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(payload.normalized_word)
+        try:
+            language = validate_language(payload.language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(payload.normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
@@ -1113,9 +1158,9 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND normalized_word = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
             """,
-            (user_id, normalized),
+            (user_id, language, normalized),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="srs_card_not_found")
@@ -1134,9 +1179,9 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 """
                 UPDATE srs_cards
                 SET stage_index = ?, due_at = ?, last_reviewed_at = ?, updated_at = ?, is_introduced = 1, is_new = 0
-                WHERE user_id = ? AND normalized_word = ?
+                WHERE user_id = ? AND language = ? AND normalized_word = ?
                 """,
-                (next_stage, to_iso_utc(next_due), now_iso, now_iso, user_id, normalized),
+                (next_stage, to_iso_utc(next_due), now_iso, now_iso, user_id, language, normalized),
             )
         else:
             wrong_delay_hours = random.randint(4, 12)
@@ -1145,9 +1190,9 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 """
                 UPDATE srs_cards
                 SET stage_index = 0, due_at = ?, last_reviewed_at = ?, updated_at = ?, is_introduced = 1, is_new = 0
-                WHERE user_id = ? AND normalized_word = ?
+                WHERE user_id = ? AND language = ? AND normalized_word = ?
                 """,
-                (to_iso_utc(wrong_due), now_iso, now_iso, user_id, normalized),
+                (to_iso_utc(wrong_due), now_iso, now_iso, user_id, language, normalized),
             )
         conn.commit()
 
@@ -1155,11 +1200,11 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND normalized_word = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
             """,
-            (user_id, normalized),
+            (user_id, language, normalized),
         ).fetchone()
-        display_word = resolve_srs_display_words(conn, user_id, [normalized]).get(normalized, normalized)
+        display_word = resolve_srs_display_words(conn, user_id, [normalized], language).get(normalized, normalized)
         return SrsReviewResponse(card=row_to_srs_card_with_display(updated, display_word))
 
     @app.get("/v1/users/{user_id}/texts/{text_id}/progress", response_model=TextProgress)
@@ -1167,24 +1212,34 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         user_id = ensure_uuid(user_id, "user_id")
         text_id = ensure_uuid(text_id, "text_id")
         ensure_active_user(conn, user_id)
-        ensure_user_text(conn, user_id, text_id)
-        return parse_progress(conn, user_id, text_id)
+        text_row = ensure_user_text(conn, user_id, text_id)
+        text_language = text_row["language"] if "language" in text_row.keys() else "hebrew"
+        return parse_progress(conn, user_id, text_id, text_language)
 
     @app.get("/v1/users/{user_id}/words/{normalized_word}/meanings", response_model=MeaningsListResponse)
-    def list_meanings(user_id: str, normalized_word: str, conn: Any = Depends(get_conn)) -> MeaningsListResponse:
+    def list_meanings(
+        user_id: str,
+        normalized_word: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> MeaningsListResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
         rows = conn.execute(
             """
             SELECT * FROM meanings
-            WHERE user_id = ? AND normalized_word = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
             ORDER BY created_at ASC, meaning_id ASC
             """,
-            (user_id, normalized),
+            (user_id, language, normalized),
         ).fetchall()
         return MeaningsListResponse(items=[row_to_meaning(row) for row in rows])
 
@@ -1193,11 +1248,16 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         user_id: str,
         normalized_word: str,
         payload: MeaningCreateRequest,
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> MeaningResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
@@ -1207,10 +1267,10 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         source_sentence = payload.source_sentence.strip() if payload.source_sentence else None
         conn.execute(
             """
-            INSERT INTO meanings (meaning_id, user_id, normalized_word, meaning_text, source_sentence, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO meanings (meaning_id, user_id, language, normalized_word, meaning_text, source_sentence, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (meaning_id, user_id, normalized, meaning_text, source_sentence, now),
+            (meaning_id, user_id, language, normalized, meaning_text, source_sentence, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM meanings WHERE meaning_id = ?", (meaning_id,)).fetchone()
@@ -1221,16 +1281,21 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         user_id: str,
         normalized_word: str,
         payload: MeaningGenerateRequest,
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> MeaningResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
         try:
-            meaning_raw = app.state.meaning_generator.generate(normalized, payload.sentence_context)
+            meaning_raw = app.state.meaning_generator.generate(normalized, payload.sentence_context, language)
             meaning_text = normalize_english_meaning_text(meaning_raw)
         except MeaningGenerationError as exc:
             msg = str(exc)
@@ -1242,10 +1307,10 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         meaning_id = str(uuid4())
         conn.execute(
             """
-            INSERT INTO meanings (meaning_id, user_id, normalized_word, meaning_text, source_sentence, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO meanings (meaning_id, user_id, language, normalized_word, meaning_text, source_sentence, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (meaning_id, user_id, normalized, meaning_text, payload.sentence_context, now),
+            (meaning_id, user_id, language, normalized, meaning_text, payload.sentence_context, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM meanings WHERE meaning_id = ?", (meaning_id,)).fetchone()
@@ -1257,19 +1322,24 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         normalized_word: str,
         meaning_id: str,
         payload: MeaningUpdateRequest,
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> MeaningResponse:
         user_id = ensure_uuid(user_id, "user_id")
         meaning_id = ensure_uuid(meaning_id, "meaning_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
         meaning_text = normalize_meaning_text(payload.meaning_text)
         cursor = conn.execute(
-            "UPDATE meanings SET meaning_text = ? WHERE meaning_id = ? AND user_id = ? AND normalized_word = ?",
-            (meaning_text, meaning_id, user_id, normalized),
+            "UPDATE meanings SET meaning_text = ? WHERE meaning_id = ? AND user_id = ? AND language = ? AND normalized_word = ?",
+            (meaning_text, meaning_id, user_id, language, normalized),
         )
         conn.commit()
         if cursor.rowcount == 0:
@@ -1278,16 +1348,26 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         return row_to_meaning(row)
 
     @app.delete("/v1/users/{user_id}/words/{normalized_word}/meanings/{meaning_id}")
-    def delete_meaning(user_id: str, normalized_word: str, meaning_id: str, conn: Any = Depends(get_conn)) -> dict[str, str]:
+    def delete_meaning(
+        user_id: str,
+        normalized_word: str,
+        meaning_id: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> dict[str, str]:
         user_id = ensure_uuid(user_id, "user_id")
         meaning_id = ensure_uuid(meaning_id, "meaning_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
         cursor = conn.execute(
-            "DELETE FROM meanings WHERE meaning_id = ? AND user_id = ? AND normalized_word = ?",
-            (meaning_id, user_id, normalized),
+            "DELETE FROM meanings WHERE meaning_id = ? AND user_id = ? AND language = ? AND normalized_word = ?",
+            (meaning_id, user_id, language, normalized),
         )
         conn.commit()
         if cursor.rowcount == 0:
@@ -1295,20 +1375,29 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         return {"status": "deleted"}
 
     @app.get("/v1/users/{user_id}/words/{normalized_word}/details", response_model=WordDetailsResponse)
-    def get_word_details(user_id: str, normalized_word: str, conn: Any = Depends(get_conn)) -> WordDetailsResponse:
+    def get_word_details(
+        user_id: str,
+        normalized_word: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> WordDetailsResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
         row = conn.execute(
             """
-            SELECT user_id, normalized_word, mnemonic, created_at, updated_at
+            SELECT user_id, language, normalized_word, mnemonic, created_at, updated_at
             FROM word_details
-            WHERE user_id = ? AND normalized_word = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
             """,
-            (user_id, normalized),
+            (user_id, language, normalized),
         ).fetchone()
         return row_to_word_details(row, user_id, normalized)
 
@@ -1317,11 +1406,16 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         user_id: str,
         normalized_word: str,
         payload: WordDetailsUpdateRequest,
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> WordDetailsResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
-        normalized = normalize_token(normalized_word)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
         if normalized is None:
             raise HTTPException(status_code=400, detail="invalid_word")
 
@@ -1329,21 +1423,21 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         now = utc_now_iso()
         conn.execute(
             """
-            INSERT INTO word_details (user_id, normalized_word, mnemonic, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(user_id, normalized_word)
+            INSERT INTO word_details (user_id, language, normalized_word, mnemonic, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, language, normalized_word)
             DO UPDATE SET mnemonic = excluded.mnemonic, updated_at = excluded.updated_at
             """,
-            (user_id, normalized, mnemonic, now, now),
+            (user_id, language, normalized, mnemonic, now, now),
         )
         conn.commit()
         row = conn.execute(
             """
-            SELECT user_id, normalized_word, mnemonic, created_at, updated_at
+            SELECT user_id, language, normalized_word, mnemonic, created_at, updated_at
             FROM word_details
-            WHERE user_id = ? AND normalized_word = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
             """,
-            (user_id, normalized),
+            (user_id, language, normalized),
         ).fetchone()
         return row_to_word_details(row, user_id, normalized)
 
@@ -1351,15 +1445,20 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     def progress_history(
         user_id: str,
         range: str = Query(default="month"),
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> ProgressHistoryResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
         if range not in ("month", "year", "all"):
             raise HTTPException(status_code=400, detail="invalid_range")
         rows = conn.execute(
-            "SELECT state, created_at, updated_at FROM user_words WHERE user_id = ?",
-            (user_id,),
+            "SELECT state, created_at, updated_at FROM user_words WHERE user_id = ? AND language = ?",
+            (user_id, language),
         ).fetchall()
         return ProgressHistoryResponse(range=range, buckets=_bucket_progress_history(rows, range))
 
@@ -1367,15 +1466,26 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
     def words_read_history(
         user_id: str,
         range: str = Query(default="month"),
+        language: str = Query(default="hebrew"),
         conn: Any = Depends(get_conn),
     ) -> WordsReadHistoryResponse:
         user_id = ensure_uuid(user_id, "user_id")
         ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
         if range not in ("month", "year", "all"):
             raise HTTPException(status_code=400, detail="invalid_range")
+        # words-read is text-based; filter by texts of the given language
         rows = conn.execute(
-            "SELECT word_count, read_at FROM sentences_read WHERE user_id = ?",
-            (user_id,),
+            """
+            SELECT sr.word_count, sr.read_at
+            FROM sentences_read sr
+            JOIN texts t ON t.text_id = sr.text_id
+            WHERE sr.user_id = ? AND t.language = ?
+            """,
+            (user_id, language),
         ).fetchall()
         return WordsReadHistoryResponse(range=range, buckets=_bucket_words_read(rows, range))
 

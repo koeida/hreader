@@ -14,23 +14,23 @@ class CountingGenerator:
     def __init__(self) -> None:
         self.calls = 0
 
-    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+    def generate(self, normalized_word: str, sentence_context: str | None, language: str = "hebrew") -> str:
         self.calls += 1
         return f"Meaning gloss {self.calls}"
 
 
 class WhitespaceEnglishGenerator:
-    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+    def generate(self, normalized_word: str, sentence_context: str | None, language: str = "hebrew") -> str:
         return "  basic   meaning\n"
 
 
 class HebrewOutputGenerator:
-    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+    def generate(self, normalized_word: str, sentence_context: str | None, language: str = "hebrew") -> str:
         return f"פירוש עבור {normalized_word}"
 
 
 class TimeoutGenerator:
-    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+    def generate(self, normalized_word: str, sentence_context: str | None, language: str = "hebrew") -> str:
         raise MeaningGenerationError("meaning_generation_timeout")
 
 
@@ -709,3 +709,131 @@ def test_progress_history_endpoint_exists_and_returns_data(tmp_path: Path) -> No
         # Invalid range should return 400
         resp = client.get(f"/v1/users/{user_id}/progress/history?range=invalid")
         assert resp.status_code == 400
+
+
+def test_multi_language_text_creation_and_listing(tmp_path: Path) -> None:
+    """Test POST text with language='latin', and GET texts filters by language."""
+    with make_client(tmp_path) as client:
+        user_id = create_user(client, "Polyglot")
+
+        # Create a Hebrew text (default)
+        resp = client.post(
+            f"/v1/users/{user_id}/texts",
+            json={"title": "Hebrew Text", "content": "שלום עולם. ברוך הבא."},
+        )
+        assert resp.status_code == 200
+
+        # Create a Latin text
+        resp = client.post(
+            f"/v1/users/{user_id}/texts",
+            json={"title": "Latin Text", "content": "Gallia est omnis divisa in partes tres.", "language": "latin"},
+        )
+        assert resp.status_code == 200
+        latin_text_id = resp.json()["text_id"]
+
+        # GET texts?language=latin returns only Latin texts
+        resp = client.get(f"/v1/users/{user_id}/texts?language=latin")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["text_id"] == latin_text_id
+
+        # GET texts?language=hebrew returns only Hebrew texts
+        resp = client.get(f"/v1/users/{user_id}/texts?language=hebrew")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["title"] == "Hebrew Text"
+
+        # Invalid language returns 400
+        resp = client.post(
+            f"/v1/users/{user_id}/texts",
+            json={"title": "Bad", "content": "test", "language": "klingon"},
+        )
+        assert resp.status_code == 400
+        assert "invalid_language" in resp.json()["error"]["message"]
+
+
+def test_multi_language_word_state_independence(tmp_path: Path) -> None:
+    """Test PUT word state with language=latin is independent of hebrew."""
+    with make_client(tmp_path) as client:
+        user_id = create_user(client, "Bilingual")
+
+        word = "gallia"
+
+        # Set word state in Latin
+        resp = client.put(
+            f"/v1/users/{user_id}/words/{word}?language=latin",
+            json={"state": "known"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["language"] == "latin"
+        assert data["state"] == "known"
+
+        # Same word in Hebrew should not exist / be never_seen
+        resp = client.put(
+            f"/v1/users/{user_id}/words/{word}?language=hebrew",
+            json={"state": "unknown"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["language"] == "hebrew"
+        assert data["state"] == "unknown"
+
+        # List Hebrew words — only the Hebrew entry
+        resp = client.get(f"/v1/users/{user_id}/words?language=hebrew")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        hebrew_words = [i for i in items if i["normalized_word"] == word]
+        assert len(hebrew_words) == 1
+        assert hebrew_words[0]["language"] == "hebrew"
+        assert hebrew_words[0]["state"] == "unknown"
+
+        # List Latin words — only the Latin entry
+        resp = client.get(f"/v1/users/{user_id}/words?language=latin")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        latin_words = [i for i in items if i["normalized_word"] == word]
+        assert len(latin_words) == 1
+        assert latin_words[0]["language"] == "latin"
+        assert latin_words[0]["state"] == "known"
+
+
+def test_multi_language_srs_session_independence(tmp_path: Path) -> None:
+    """Test SRS session with language=latin is independent of hebrew."""
+    with make_client(tmp_path) as client:
+        user_id = create_user(client, "SrsPolyglot")
+
+        # Create a Latin text and load a sentence to populate user_words
+        resp = client.post(
+            f"/v1/users/{user_id}/texts",
+            json={
+                "title": "Latin",
+                "content": "Gallia est omnis divisa in partes tres.",
+                "language": "latin",
+            },
+        )
+        assert resp.status_code == 200
+        text_id = resp.json()["text_id"]
+
+        # Load sentence to populate user_words for Latin
+        client.get(f"/v1/users/{user_id}/texts/{text_id}/sentences/0")
+
+        # Mark a Latin word as unknown so SRS card gets created
+        client.put(
+            f"/v1/users/{user_id}/words/gallia?language=latin",
+            json={"state": "unknown"},
+        )
+
+        # Get SRS session for Latin — should have available_new_count > 0
+        resp = client.get(f"/v1/users/{user_id}/srs/session?language=latin")
+        assert resp.status_code == 200
+        latin_session = resp.json()
+        assert latin_session["available_new_count"] > 0
+
+        # Get SRS session for Hebrew — should have available_new_count == 0 (no Hebrew words)
+        resp = client.get(f"/v1/users/{user_id}/srs/session?language=hebrew")
+        assert resp.status_code == 200
+        hebrew_session = resp.json()
+        assert hebrew_session["available_new_count"] == 0

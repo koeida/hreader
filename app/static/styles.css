@@ -110,6 +110,34 @@ body {
   color: #15397f;
 }
 
+.language-switcher {
+  display: none;
+  gap: 2px;
+  background: var(--surface-strong);
+  border-radius: 6px;
+  padding: 2px;
+}
+.language-switcher.visible { display: flex; }
+
+.lang-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+.lang-btn.active {
+  background: var(--surface-strong);
+  color: var(--ink);
+  font-weight: 500;
+}
+.lang-btn:hover:not(.active) {
+  color: var(--muted-strong);
+}
+
 /* User Selection Modal */
 .user-selection-modal {
   position: fixed;
@@ -558,9 +586,15 @@ textarea:focus-visible {
   padding: 1rem 1.18rem;
   line-height: 2.15;
   margin: 0.55rem 0 0;
-  direction: rtl;
+}
+
+.sentence[dir="rtl"] {
   text-align: right;
   unicode-bidi: bidi-override;
+}
+
+.sentence[dir="ltr"] {
+  text-align: left;
 }
 
 .sentence-word {
@@ -571,7 +605,6 @@ textarea:focus-visible {
   padding: 0.18rem 0.37rem;
   min-height: 34px;
   transition: transform 140ms ease, box-shadow 180ms ease;
-  direction: rtl;
   unicode-bidi: isolate;
 }
 
@@ -940,6 +973,14 @@ textarea:focus-visible {
   .srs-front-word {
     font-size: 4rem;
   }
+}
+
+.srs-front-word[dir="rtl"] {
+  font-family: var(--font-hebrew, "Noto Sans Hebrew", sans-serif);
+}
+.srs-front-word[dir="ltr"] {
+  font-family: Georgia, serif;
+  letter-spacing: 0.02em;
 }
 
 .srs-hint {

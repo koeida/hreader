@@ -7,7 +7,7 @@ HEBREW_MAQAF = "\u05be"
 NIKKUD_RE = re.compile(r"[\u0591-\u05bd\u05bf-\u05c7]")
 PUNCT_ONLY_RE = re.compile(r"^[^\w\u0590-\u05ff]+$", re.UNICODE)
 NUMERIC_ONLY_RE = re.compile(r"^\d+$")
-TOKEN_RE = re.compile(r"[\s,;:!?()\[\]{}\"'“”׳״]+")
+TOKEN_RE = re.compile(r"[\s,;:!?()\[\]{}\"'""׳״]+")
 
 
 @dataclass(frozen=True)
@@ -29,27 +29,42 @@ def _candidate_chunks(text: str) -> list[str]:
     return chunks
 
 
-def normalize_token(token: str) -> str | None:
-    cleaned = strip_nikkud(token).strip()
-    if not cleaned:
+def normalize_token(token: str, language: str = "hebrew") -> str | None:
+    if language == "hebrew":
+        token = NIKKUD_RE.sub("", token)
+    token = token.strip()
+    if not token:
         return None
-    if NUMERIC_ONLY_RE.match(cleaned):
+    if NUMERIC_ONLY_RE.match(token):
         return None
-    if PUNCT_ONLY_RE.match(cleaned):
-        return None
-    contains_non_hebrew_alpha = any(("a" <= c.lower() <= "z") for c in cleaned)
-    if contains_non_hebrew_alpha:
-        cleaned = cleaned.lower()
-    if NUMERIC_ONLY_RE.match(cleaned):
-        return None
-    return cleaned
+    if language == "hebrew":
+        if PUNCT_ONLY_RE.match(token):
+            return None
+        contains_non_hebrew_alpha = any(("a" <= c.lower() <= "z") for c in token)
+        if contains_non_hebrew_alpha:
+            token = token.lower()
+    elif language == "latin":
+        token = token.strip(".,;:!?\"'""''")
+        if not token:
+            return None
+        if PUNCT_ONLY_RE.match(token):
+            return None
+        token = token.lower()
+    return token
 
 
-def tokenize_eligible(text: str) -> list[TokenInfo]:
+def tokenize_eligible(text: str, language: str = "hebrew") -> list[TokenInfo]:
     out: list[TokenInfo] = []
-    for chunk in _candidate_chunks(text):
-        normalized = normalize_token(chunk)
-        if normalized is None:
+    for base in TOKEN_RE.split(text):
+        if not base:
             continue
-        out.append(TokenInfo(token=chunk, normalized_word=normalized))
+        if language == "hebrew":
+            chunks = [part for part in base.split(HEBREW_MAQAF) if part]
+        else:
+            chunks = [base]
+        for chunk in chunks:
+            normalized = normalize_token(chunk, language)
+            if normalized is None:
+                continue
+            out.append(TokenInfo(token=chunk, normalized_word=normalized))
     return out

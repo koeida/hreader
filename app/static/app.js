@@ -50,14 +50,14 @@ class ApiClient {
     return this.request(`/v1/users/${userId}/restore`, { method: "POST" });
   }
 
-  listTexts(userId) {
-    return this.request(`/v1/users/${userId}/texts`, { method: "GET" });
+  listTexts(userId, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/texts?language=${encodeURIComponent(language)}`, { method: "GET" });
   }
 
-  createText(userId, title, content) {
+  createText(userId, title, content, language = "hebrew") {
     return this.request(`/v1/users/${userId}/texts`, {
       method: "POST",
-      body: JSON.stringify({ title, content }),
+      body: JSON.stringify({ title, content, language }),
     });
   }
 
@@ -87,83 +87,83 @@ class ApiClient {
     });
   }
 
-  updateWordState(userId, normalizedWord, state) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}`, {
+  updateWordState(userId, normalizedWord, state, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}?language=${encodeURIComponent(language)}`, {
       method: "PUT",
       body: JSON.stringify({ state }),
     });
   }
 
-  listWords(userId, state = "all", page = 1, limit = 50) {
-    return this.request(`/v1/users/${userId}/words?state=${state}&page=${page}&limit=${limit}`, {
+  listWords(userId, state = "all", page = 1, limit = 50, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words?state=${state}&page=${page}&limit=${limit}&language=${encodeURIComponent(language)}`, {
       method: "GET",
     });
   }
 
-  listMeanings(userId, normalizedWord) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings`, {
+  listMeanings(userId, normalizedWord, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings?language=${encodeURIComponent(language)}`, {
       method: "GET",
     });
   }
 
-  createMeaning(userId, normalizedWord, meaningText) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings`, {
+  createMeaning(userId, normalizedWord, meaningText, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings?language=${encodeURIComponent(language)}`, {
       method: "POST",
       body: JSON.stringify({ meaning_text: meaningText }),
     });
   }
 
-  generateMeaning(userId, normalizedWord, sentenceContext) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/generate`, {
+  generateMeaning(userId, normalizedWord, sentenceContext, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/generate?language=${encodeURIComponent(language)}`, {
       method: "POST",
       body: JSON.stringify({ sentence_context: sentenceContext || null }),
     });
   }
 
-  updateMeaning(userId, normalizedWord, meaningId, meaningText) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/${meaningId}`, {
+  updateMeaning(userId, normalizedWord, meaningId, meaningText, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/${meaningId}?language=${encodeURIComponent(language)}`, {
       method: "PUT",
       body: JSON.stringify({ meaning_text: meaningText }),
     });
   }
 
-  deleteMeaning(userId, normalizedWord, meaningId) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/${meaningId}`, {
+  deleteMeaning(userId, normalizedWord, meaningId, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/meanings/${meaningId}?language=${encodeURIComponent(language)}`, {
       method: "DELETE",
     });
   }
 
-  getWordDetails(userId, normalizedWord) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details`, {
+  getWordDetails(userId, normalizedWord, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details?language=${encodeURIComponent(language)}`, {
       method: "GET",
     });
   }
 
-  updateWordDetails(userId, normalizedWord, mnemonic) {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details`, {
+  updateWordDetails(userId, normalizedWord, mnemonic, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details?language=${encodeURIComponent(language)}`, {
       method: "PUT",
       body: JSON.stringify({ mnemonic }),
     });
   }
 
-  getSrsSession(userId, timezoneOffsetMinutes) {
+  getSrsSession(userId, timezoneOffsetMinutes, language = "hebrew") {
     return this.request(
-      `/v1/users/${userId}/srs/session?timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}`,
+      `/v1/users/${userId}/srs/session?timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}&language=${encodeURIComponent(language)}`,
       { method: "GET" }
     );
   }
 
-  addSrsNewCards(userId, count, timezoneOffsetMinutes) {
+  addSrsNewCards(userId, count, timezoneOffsetMinutes, language = "hebrew") {
     return this.request(`/v1/users/${userId}/srs/session/add-new`, {
       method: "POST",
-      body: JSON.stringify({ count, timezone_offset_minutes: timezoneOffsetMinutes }),
+      body: JSON.stringify({ count, timezone_offset_minutes: timezoneOffsetMinutes, language }),
     });
   }
 
-  submitSrsReview(userId, normalizedWord, result) {
+  submitSrsReview(userId, normalizedWord, result, language = "hebrew") {
     return this.request(`/v1/users/${userId}/srs/review`, {
       method: "POST",
-      body: JSON.stringify({ normalized_word: normalizedWord, result }),
+      body: JSON.stringify({ normalized_word: normalizedWord, result, language }),
     });
   }
 
@@ -171,12 +171,12 @@ class ApiClient {
     return this.request("/v1/backup/status", { method: "GET" });
   }
 
-  getProgressHistory(userId, range) {
-    return this.request(`/v1/users/${userId}/progress/history?range=${encodeURIComponent(range)}`, { method: "GET" });
+  getProgressHistory(userId, range, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/progress/history?range=${encodeURIComponent(range)}&language=${encodeURIComponent(language)}`, { method: "GET" });
   }
 
-  getWordsReadHistory(userId, range) {
-    return this.request(`/v1/users/${userId}/progress/words-read?range=${encodeURIComponent(range)}`, { method: "GET" });
+  getWordsReadHistory(userId, range, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/progress/words-read?range=${encodeURIComponent(range)}&language=${encodeURIComponent(language)}`, { method: "GET" });
   }
 }
 
@@ -218,8 +218,8 @@ const state = {
   currentSentence: null,
   wordsPage: 1,
   wordsLimit: 50,
-  activeView: localStorage.getItem("active_view") || "library",
   currentView: "library",
+  currentLanguage: localStorage.getItem("current_language") || "hebrew",
   isLoggedIn: !!localStorage.getItem("active_user_id"),
   selectedTextId: null,
   srsDueQueue: [],
@@ -487,6 +487,8 @@ async function handleUserPick(userId) {
   state.isLoggedIn = true;
   localStorage.setItem("active_user_id", userId);
   hideUserSelection();
+  updateLanguageSwitcher();
+  updateDirectionAttributes();
   await Promise.all([loadTexts(), loadWords()]);
   switchView("library");
 }
@@ -497,7 +499,48 @@ function handleLogout() {
   state.selectedTextId = null;
   localStorage.removeItem("active_user_id");
   el.userPicker.value = "";
+  updateLanguageSwitcher();
   showUserSelection();
+}
+
+const LANG_ATTRS = {
+  hebrew: { dir: "rtl", lang: "he" },
+  latin:  { dir: "ltr", lang: "la" },
+};
+
+function updateDirectionAttributes() {
+  const attrs = LANG_ATTRS[state.currentLanguage] || LANG_ATTRS.hebrew;
+  const sentence = document.getElementById("reader-sentence");
+  const srsWord = document.getElementById("srs-front-word");
+  const selectedWordDisplay = document.getElementById("word-details-word");
+  if (sentence) { sentence.setAttribute("dir", attrs.dir); sentence.setAttribute("lang", attrs.lang); }
+  if (srsWord) { srsWord.setAttribute("dir", attrs.dir); srsWord.setAttribute("lang", attrs.lang); }
+  if (selectedWordDisplay) { selectedWordDisplay.setAttribute("dir", attrs.dir); selectedWordDisplay.setAttribute("lang", attrs.lang); }
+}
+
+function updateLanguageSwitcher() {
+  document.querySelectorAll(".lang-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.lang === state.currentLanguage);
+  });
+  const switcher = document.getElementById("language-switcher");
+  if (switcher) {
+    if (state.isLoggedIn) {
+      switcher.classList.add("visible");
+    } else {
+      switcher.classList.remove("visible");
+    }
+  }
+}
+
+function handleLanguageSwitch(lang) {
+  if (lang === state.currentLanguage) return;
+  state.currentLanguage = lang;
+  localStorage.setItem("current_language", lang);
+  updateLanguageSwitcher();
+  updateDirectionAttributes();
+  void loadTexts();
+  if (state.currentView === "srs") void loadSrsSession();
+  if (state.currentView === "progress") void loadProgressData();
 }
 
 function colorForPercentage(pct) {
@@ -632,7 +675,7 @@ async function handleDeleteText(textId, title) {
 function setActiveView(viewName, persist = true) {
   const allowedViews = new Set(VIEW_ORDER);
   const nextView = allowedViews.has(viewName) ? viewName : "library";
-  state.activeView = nextView;
+  state.currentView = nextView;
   if (el.appRoot) {
     el.appRoot.classList.remove("view-library", "view-reader", "view-words", "view-srs");
     el.appRoot.classList.add(`view-${nextView}`);
@@ -874,7 +917,7 @@ async function loadSrsSession() {
   }
   setStateMessage(el.srsState, "Loading...");
   try {
-    const data = await state.api.getSrsSession(state.activeUserId, timezoneOffsetMinutes());
+    const data = await state.api.getSrsSession(state.activeUserId, timezoneOffsetMinutes(), state.currentLanguage);
     if (!isCurrentRequest("srsSession", requestVersion)) {
       return;
     }
@@ -898,8 +941,8 @@ async function loadSrsDetailsForCurrentCard() {
   state.srsLoadingDetailsForWord = word;
   try {
     const [meanings, details] = await Promise.all([
-      state.api.listMeanings(state.activeUserId, word),
-      state.api.getWordDetails(state.activeUserId, word),
+      state.api.listMeanings(state.activeUserId, word, state.currentLanguage),
+      state.api.getWordDetails(state.activeUserId, word, state.currentLanguage),
     ]);
     if (!isCurrentRequest("srsDetails", requestVersion) || state.srsCurrentCard?.normalized_word !== word) {
       return;
@@ -935,7 +978,7 @@ async function submitSrsResult(result) {
   }
   const requestVersion = nextRequestVersion("srsReview");
   try {
-    await state.api.submitSrsReview(state.activeUserId, card.normalized_word, result);
+    await state.api.submitSrsReview(state.activeUserId, card.normalized_word, result, state.currentLanguage);
     if (!isCurrentRequest("srsReview", requestVersion)) {
       return;
     }
@@ -976,7 +1019,7 @@ async function undoSrsReview() {
   try {
     // Reverse the previous submission
     const reverseResult = undoEntry.result === "wrong" ? "right" : "wrong";
-    await state.api.submitSrsReview(state.activeUserId, undoEntry.card.normalized_word, reverseResult);
+    await state.api.submitSrsReview(state.activeUserId, undoEntry.card.normalized_word, reverseResult, state.currentLanguage);
 
     if (!isCurrentRequest("srsUndo", requestVersion)) {
       return;
@@ -1015,7 +1058,7 @@ async function loadProgressData() {
   }
   setStateMessage(el.progressState, "Loading...");
   try {
-    const data = await state.api.getProgressHistory(state.activeUserId, state.progressRange);
+    const data = await state.api.getProgressHistory(state.activeUserId, state.progressRange, state.currentLanguage);
     if (!isCurrentRequest("progressHistory", requestVersion)) {
       return;
     }
@@ -1036,7 +1079,7 @@ async function loadWordsReadData() {
   }
   setStateMessage(el.wordsReadState, "Loading...");
   try {
-    const data = await state.api.getWordsReadHistory(state.activeUserId, state.progressRange);
+    const data = await state.api.getWordsReadHistory(state.activeUserId, state.progressRange, state.currentLanguage);
     if (!isCurrentRequest("wordsReadHistory", requestVersion)) {
       return;
     }
@@ -1208,7 +1251,7 @@ async function loadTexts() {
 
   setStateMessage(el.textsState, "Loading...");
   try {
-    const data = await state.api.listTexts(state.activeUserId);
+    const data = await state.api.listTexts(state.activeUserId, state.currentLanguage);
     if (!isCurrentRequest("texts", requestVersion)) {
       return;
     }
@@ -1457,7 +1500,7 @@ function renderWords(data) {
       select.appendChild(option);
     }
     select.onchange = async () => {
-      await state.api.updateWordState(state.activeUserId, item.normalized_word, select.value);
+      await state.api.updateWordState(state.activeUserId, item.normalized_word, select.value, state.currentLanguage);
       await Promise.all([loadWords(), loadTexts()]);
     };
     li.appendChild(select);
@@ -1474,7 +1517,7 @@ async function loadWords() {
 
   renderListState(el.wordsList, el.wordsState, { loading: true });
   try {
-    const data = await state.api.listWords(state.activeUserId, el.wordsFilter.value, state.wordsPage, state.wordsLimit);
+    const data = await state.api.listWords(state.activeUserId, el.wordsFilter.value, state.wordsPage, state.wordsLimit, state.currentLanguage);
     if (!isCurrentRequest("words", requestVersion)) {
       return;
     }
@@ -1718,7 +1761,7 @@ async function loadWordDetailsForWord(word) {
   }
   setStateMessage(el.mnemonicState, "Loading...");
   try {
-    const data = await state.api.getWordDetails(state.activeUserId, word);
+    const data = await state.api.getWordDetails(state.activeUserId, word, state.currentLanguage);
     if (!isCurrentRequest("wordDetails", requestVersion) || word !== state.selectedWord) {
       return;
     }
@@ -1741,7 +1784,7 @@ async function loadMeaningsForWord(word) {
 
   renderListState(el.meaningsList, el.meaningsState, { loading: true });
   try {
-    const data = await state.api.listMeanings(state.activeUserId, word);
+    const data = await state.api.listMeanings(state.activeUserId, word, state.currentLanguage);
     if (!isCurrentRequest("meanings", requestVersion) || word !== state.selectedWord) {
       return;
     }
@@ -1778,7 +1821,7 @@ async function updateMeaning(meaningId, editorNode, saveButton) {
     saveButton.disabled = true;
     saveButton.textContent = "Saving...";
     setStateMessage(el.meaningsState, "Saving...");
-    await state.api.updateMeaning(state.activeUserId, actionWord, meaningId, newText);
+    await state.api.updateMeaning(state.activeUserId, actionWord, meaningId, newText, state.currentLanguage);
     if (state.selectedWord !== actionWord) {
       return;
     }
@@ -1819,7 +1862,7 @@ async function onSentenceWordActivated(word) {
   const requestVersion = nextRequestVersion("wordSave");
   const wordAtSaveStart = word;
   try {
-    await state.api.updateWordState(state.activeUserId, wordAtSaveStart, nextState);
+    await state.api.updateWordState(state.activeUserId, wordAtSaveStart, nextState, state.currentLanguage);
     if (!isCurrentRequest("wordSave", requestVersion) || state.selectedWord !== wordAtSaveStart) {
       return;
     }
@@ -1840,7 +1883,7 @@ async function deleteMeaning(meaningId, rowNode) {
   try {
     rowNode.classList.add("is-removing");
     setStateMessage(el.meaningsState, "Deleting...");
-    await state.api.deleteMeaning(state.activeUserId, actionWord, meaningId);
+    await state.api.deleteMeaning(state.activeUserId, actionWord, meaningId, state.currentLanguage);
     if (state.selectedWord !== actionWord) {
       return;
     }
@@ -1953,6 +1996,10 @@ for (const btn of el.progressRangeBtns) {
   };
 }
 
+document.querySelectorAll(".lang-btn").forEach(btn => {
+  btn.onclick = () => handleLanguageSwitch(btn.dataset.lang);
+});
+
 if (el.logoutLink) {
   el.logoutLink.onclick = (event) => {
     event.preventDefault();
@@ -2019,7 +2066,7 @@ if (el.activeUser) {
     clearUserScopedViews();
     state.wordsLimit = Number(el.wordsLimit?.value || 50);
     await Promise.all([loadTexts(), loadWords()]);
-    if (state.activeView === "srs") {
+    if (state.currentView === "srs") {
       await loadSrsSession();
     }
   };
@@ -2033,7 +2080,7 @@ if (el.createTextForm) {
       const title = el.newTextTitle.value.trim();
       const content = el.newTextContent.value.trim();
       if (!title || !content) return;
-      await state.api.createText(state.activeUserId, title, content);
+      await state.api.createText(state.activeUserId, title, content, state.currentLanguage);
       el.newTextTitle.value = "";
       el.newTextContent.value = "";
       await loadTexts();
@@ -2077,7 +2124,7 @@ el.mnemonicForm.onsubmit = async (event) => {
       submitButton.textContent = "Saving...";
     }
     setStateMessage(el.mnemonicState, "Saving...");
-    await state.api.updateWordDetails(state.activeUserId, actionWord, el.wordMnemonic.value.trim() || null);
+    await state.api.updateWordDetails(state.activeUserId, actionWord, el.wordMnemonic.value.trim() || null, state.currentLanguage);
     if (state.selectedWord !== actionWord) {
       return;
     }
@@ -2116,7 +2163,7 @@ el.addMeaningForm.onsubmit = async (event) => {
       submitButton.textContent = "Adding...";
     }
     setStateMessage(el.meaningsState, "Saving...");
-    await state.api.createMeaning(state.activeUserId, actionWord, meaningText);
+    await state.api.createMeaning(state.activeUserId, actionWord, meaningText, state.currentLanguage);
     if (state.selectedWord !== actionWord) {
       return;
     }
@@ -2152,7 +2199,7 @@ el.generateMeaningForm.onsubmit = async (event) => {
       submitButton.textContent = "Generating...";
     }
     setStateMessage(el.meaningsState, "Generating...");
-    await state.api.generateMeaning(state.activeUserId, actionWord, el.meaningContext.value.trim());
+    await state.api.generateMeaning(state.activeUserId, actionWord, el.meaningContext.value.trim(), state.currentLanguage);
     if (state.selectedWord !== actionWord) {
       return;
     }
@@ -2225,7 +2272,7 @@ el.srsAddNewForm.onsubmit = async (event) => {
     submitButton.disabled = true;
     submitButton.textContent = "Adding...";
     setStateMessage(el.srsState, "Adding...");
-    const data = await state.api.addSrsNewCards(state.activeUserId, count, timezoneOffsetMinutes());
+    const data = await state.api.addSrsNewCards(state.activeUserId, count, timezoneOffsetMinutes(), state.currentLanguage);
     applySrsSessionData(data.added_cards, data);
     setStateMessage(el.srsState, "");
     renderSrs();
@@ -2249,7 +2296,7 @@ el.srsMnemonicForm.onsubmit = async (event) => {
     el.srsMnemonicSave.disabled = true;
     el.srsMnemonicSave.textContent = "Saving...";
     setStateMessage(el.srsState, "Saving mnemonic...");
-    const data = await state.api.updateWordDetails(state.activeUserId, word, nextMnemonic);
+    const data = await state.api.updateWordDetails(state.activeUserId, word, nextMnemonic, state.currentLanguage);
     if (state.srsCurrentCard?.normalized_word !== word) {
       return;
     }
@@ -2266,7 +2313,7 @@ el.srsMnemonicForm.onsubmit = async (event) => {
 };
 
 window.addEventListener("keydown", (event) => {
-  if (state.activeView !== "srs") {
+  if (state.currentView !== "srs") {
     return;
   }
   const activeTag = document.activeElement?.tagName?.toLowerCase() || "";
@@ -2308,6 +2355,8 @@ window.addEventListener("keydown", (event) => {
     state.isLoggedIn = true;
     state.currentView = "library";
     updateViewVisibility();
+    updateLanguageSwitcher();
+    updateDirectionAttributes();
     await Promise.all([loadTexts(), loadWords()]);
     hideUserSelection();
   } else {

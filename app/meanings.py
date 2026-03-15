@@ -11,6 +11,11 @@ class MeaningGenerationError(Exception):
 HEBREW_CHARS_RE = re.compile(r"[\u0590-\u05FF]")
 ASCII_LETTER_RE = re.compile(r"[A-Za-z]")
 
+LANGUAGE_PROMPT_PREFIX = {
+    "hebrew": "You are a Hebrew tutor. Give one concise English meaning/gloss for the target Hebrew word used in sentence context.",
+    "latin": "You are a Latin tutor. Give one concise English meaning/gloss for the target Latin word used in sentence context.",
+}
+
 
 def normalize_english_meaning_text(value: str) -> str:
     normalized = " ".join(value.strip().split())
@@ -26,9 +31,10 @@ class MeaningGenerator:
         self.command = command or ["codex", "exec"]
         self.timeout_seconds = timeout_seconds
 
-    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+    def generate(self, normalized_word: str, sentence_context: str | None, language: str = "hebrew") -> str:
+        prefix = LANGUAGE_PROMPT_PREFIX.get(language, LANGUAGE_PROMPT_PREFIX["hebrew"])
         prompt = (
-            "Give one concise English meaning/gloss for the target word used in sentence context. "
+            f"{prefix} "
             "Return only the meaning text, no labels.\n"
             f"Target word: {normalized_word}\n"
             f"Sentence: {sentence_context or ''}\n"
@@ -56,7 +62,7 @@ class FakeMeaningGenerator:
     def __init__(self) -> None:
         self.calls = 0
 
-    def generate(self, normalized_word: str, sentence_context: str | None) -> str:
+    def generate(self, normalized_word: str, sentence_context: str | None, language: str = "hebrew") -> str:
         self.calls += 1
         suffix = f" ({self.calls})"
         return f"Concise meaning for {normalized_word}{suffix}"

@@ -31,6 +31,7 @@ class UsersListResponse(BaseModel):
 class TextCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
+    language: str = "hebrew"
 
 
 class TextUpdateRequest(BaseModel):
@@ -91,6 +92,7 @@ class WordStateUpdateRequest(BaseModel):
 
 class WordStateResponse(BaseModel):
     user_id: str
+    language: str
     normalized_word: str
     state: WordState
     created_at: datetime
@@ -144,6 +146,7 @@ class WordDetailsUpdateRequest(BaseModel):
 
 class SrsCardResponse(BaseModel):
     user_id: str
+    language: str
     normalized_word: str
     display_word: str
     is_new: bool
@@ -166,6 +169,7 @@ class SrsSessionResponse(BaseModel):
 class SrsSessionAddNewRequest(BaseModel):
     count: int = Field(default=10, ge=1, le=100)
     timezone_offset_minutes: int = Field(default=0, ge=-840, le=840)
+    language: str = "hebrew"
 
 
 class SrsSessionAddNewResponse(BaseModel):
@@ -178,6 +182,7 @@ class SrsSessionAddNewResponse(BaseModel):
 class SrsReviewRequest(BaseModel):
     normalized_word: str = Field(min_length=1)
     result: Literal["right", "wrong"]
+    language: str = "hebrew"
 
 
 class SrsReviewResponse(BaseModel):
