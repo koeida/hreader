@@ -49,6 +49,8 @@ from app.models import (
     WordStateResponse,
     WordStateUpdateRequest,
     WordsListResponse,
+    WordsReadBucket,
+    WordsReadHistoryResponse,
 )
 from app.tokenizer import NIKKUD_RE, normalize_token, tokenize_eligible
 
@@ -235,6 +237,64 @@ def _bucket_progress_history(rows: list[Any], range_key: str) -> list[ProgressBu
                 cumulative_known=cumulative_known,
             )
         )
+
+    return result
+
+
+def _bucket_words_read(rows: list[Any], range_key: str) -> list[WordsReadBucket]:
+    """Generate words-read history buckets from sentences_read rows."""
+    if not rows:
+        return []
+
+    events: list[tuple[date, int]] = []
+    for row in rows:
+        read_date = datetime.fromisoformat(row["read_at"].replace("Z", "+00:00")).date()
+        events.append((read_date, row["word_count"]))
+
+    today = datetime.now(UTC).date()
+
+    if range_key == "month":
+        bucket_keys: list[str] = []
+        for i in range(29, -1, -1):
+            d = today - timedelta(days=i)
+            bucket_keys.append(d.isoformat())
+    elif range_key == "year":
+        bucket_keys = []
+        for i in range(51, -1, -1):
+            d = today - timedelta(weeks=i)
+            d_monday = d - timedelta(days=d.weekday())
+            week_key = f"{d_monday.isocalendar().year}-W{d_monday.isocalendar().week:02d}"
+            if not bucket_keys or bucket_keys[-1] != week_key:
+                bucket_keys.append(week_key)
+    else:
+        min_date = min(e[0] for e in events)
+        bucket_keys = []
+        d = min_date.replace(day=1)
+        while d <= today and len(bucket_keys) < 120:
+            bucket_keys.append(d.isoformat()[:7])
+            if d.month == 12:
+                d = d.replace(year=d.year + 1, month=1)
+            else:
+                d = d.replace(month=d.month + 1)
+
+    bucket_words: dict[str, int] = {key: 0 for key in bucket_keys}
+
+    for event_date, word_count in events:
+        if range_key == "month":
+            key = event_date.isoformat()
+        elif range_key == "year":
+            d_monday = event_date - timedelta(days=event_date.weekday())
+            key = f"{d_monday.isocalendar().year}-W{d_monday.isocalendar().week:02d}"
+        else:
+            key = event_date.isoformat()[:7]
+        if key in bucket_words:
+            bucket_words[key] += word_count
+
+    cumulative = 0
+    result: list[WordsReadBucket] = []
+    for key in bucket_keys:
+        cumulative += bucket_words[key]
+        result.append(WordsReadBucket(date=key, cumulative_words=cumulative))
 
     return result
 
@@ -767,6 +827,13 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         tokens = tokenize_eligible(sentence_text)
 
         now = utc_now_iso()
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO sentences_read (user_id, text_id, sentence_index, word_count, read_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, text_id, sentence_index, len(tokens), now),
+        )
         missing = sorted({tok.normalized_word for tok in tokens})
         for normalized_word in missing:
             conn.execute(
@@ -1295,6 +1362,22 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             (user_id,),
         ).fetchall()
         return ProgressHistoryResponse(range=range, buckets=_bucket_progress_history(rows, range))
+
+    @app.get("/v1/users/{user_id}/progress/words-read", response_model=WordsReadHistoryResponse)
+    def words_read_history(
+        user_id: str,
+        range: str = Query(default="month"),
+        conn: Any = Depends(get_conn),
+    ) -> WordsReadHistoryResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        if range not in ("month", "year", "all"):
+            raise HTTPException(status_code=400, detail="invalid_range")
+        rows = conn.execute(
+            "SELECT word_count, read_at FROM sentences_read WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        return WordsReadHistoryResponse(range=range, buckets=_bucket_words_read(rows, range))
 
     return app
 

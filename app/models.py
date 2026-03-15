@@ -219,3 +219,13 @@ class ProgressBucket(BaseModel):
 class ProgressHistoryResponse(BaseModel):
     range: str
     buckets: list[ProgressBucket]
+
+
+class WordsReadBucket(BaseModel):
+    date: str
+    cumulative_words: int
+
+
+class WordsReadHistoryResponse(BaseModel):
+    range: str
+    buckets: list[WordsReadBucket]

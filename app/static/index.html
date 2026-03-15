@@ -153,50 +153,63 @@
       </section>
 
       <!-- SRS Section -->
-      <section id="section-srs" class="view-section">
-        <div class="panel-title-row">
-          <h2>SRS</h2>
-          <span id="srs-meta" class="pill">No session loaded</span>
+      <section id="section-srs" class="view-section srs-section">
+        <div class="srs-header">
+          <h2>SRS Review</h2>
+          <span id="srs-meta" class="srs-progress-meta">No session loaded</span>
         </div>
         <div id="srs-state" class="state" role="status" aria-live="polite"></div>
 
         <div id="srs-reviewer" class="srs-reviewer is-hidden">
-          <div class="srs-front-wrap">
-            <div id="srs-front-word" class="srs-front-word" lang="he" dir="rtl"></div>
-          </div>
-
-          <div id="srs-reveal" class="srs-reveal is-hidden">
-            <div>
-              <h3>Definitions</h3>
-              <ul id="srs-definitions" class="list"></ul>
+          <div class="srs-card-container">
+            <!-- Flip card -->
+            <div class="srs-card-flip">
+              <div class="srs-card-inner">
+                <!-- Front -->
+                <div class="srs-card-face srs-card-front">
+                  <div class="srs-card-content">
+                    <div id="srs-front-word" class="srs-front-word" lang="he" dir="rtl"></div>
+                    <div class="srs-hint srs-hint-flip">press <kbd>SPACE</kbd> to flip</div>
+                  </div>
+                </div>
+                <!-- Back -->
+                <div class="srs-card-face srs-card-back">
+                  <div id="srs-reveal" class="srs-card-content">
+                    <div class="srs-back-section">
+                      <h3 class="srs-section-title">Definitions</h3>
+                      <ul id="srs-definitions" class="srs-list"></ul>
+                    </div>
+                    <div class="srs-back-section">
+                      <h3 class="srs-section-title">Mnemonic</h3>
+                      <div id="srs-mnemonic-view" class="srs-mnemonic-view"></div>
+                      <form id="srs-mnemonic-form" class="srs-mnemonic-form is-hidden">
+                        <textarea id="srs-mnemonic-input" class="srs-mnemonic-input" placeholder="Add a memory device..."></textarea>
+                        <button id="srs-mnemonic-save" type="submit">Save</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <h3>Mnemonic</h3>
-              <div id="srs-mnemonic-view" class="state"></div>
-              <form id="srs-mnemonic-form" class="row-form is-hidden">
-                <textarea id="srs-mnemonic-input" placeholder="Add a mnemonic for this word"></textarea>
-                <button id="srs-mnemonic-save" type="submit">Save Mnemonic</button>
-              </form>
-            </div>
-          </div>
-
-          <div class="nav-row">
-            <button id="srs-show" type="button">Show</button>
-            <button id="srs-wrong" type="button">Wrong (0)</button>
-            <button id="srs-right" type="button">Right (1)</button>
           </div>
         </div>
 
         <div id="srs-add-new" class="srs-add-new is-hidden">
-          <p>Add new cards to review.</p>
-          <form id="srs-add-new-form" class="row-form">
-            <input id="srs-add-count" type="number" min="1" max="20" value="10" />
-            <button id="srs-add-submit" type="submit">Add New Cards</button>
-          </form>
+          <div class="srs-empty-state">
+            <p class="srs-empty-title">No cards due right now</p>
+            <p class="srs-empty-subtitle">Add new cards to review</p>
+            <form id="srs-add-new-form" class="srs-add-form">
+              <input id="srs-add-count" type="number" min="1" max="20" value="10" />
+              <button id="srs-add-submit" type="submit">Add New Cards</button>
+            </form>
+          </div>
         </div>
 
         <div id="srs-caught-up" class="srs-caught-up is-hidden">
-          <p>All caught up.</p>
+          <div class="srs-empty-state">
+            <p class="srs-empty-title">All caught up!</p>
+            <p class="srs-empty-subtitle">You've reviewed all available cards today</p>
+          </div>
         </div>
       </section>
 
@@ -210,15 +223,17 @@
               <button id="progress-range-year"  class="range-btn"        data-range="year">Last Year</button>
               <button id="progress-range-all"   class="range-btn"        data-range="all">All Time</button>
             </div>
-            <label class="inline-label">
-              <input id="progress-unique-toggle" type="checkbox" />
-              Estimated unique words
-            </label>
           </div>
         </div>
         <div id="progress-state" class="state" role="status" aria-live="polite"></div>
         <div class="progress-chart-wrap">
           <canvas id="progress-chart"></canvas>
+        </div>
+        <div id="progress-level" class="progress-level"></div>
+        <h2 class="progress-subheading">Words Read</h2>
+        <div id="words-read-state" class="state" role="status" aria-live="polite"></div>
+        <div class="progress-chart-wrap">
+          <canvas id="words-read-chart"></canvas>
         </div>
       </section>
     </main>

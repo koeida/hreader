@@ -174,11 +174,36 @@ class ApiClient {
   getProgressHistory(userId, range) {
     return this.request(`/v1/users/${userId}/progress/history?range=${encodeURIComponent(range)}`, { method: "GET" });
   }
+
+  getWordsReadHistory(userId, range) {
+    return this.request(`/v1/users/${userId}/progress/words-read?range=${encodeURIComponent(range)}`, { method: "GET" });
+  }
 }
 
 // Percentage of words that are unique (not just variants with prefixes)
 // Calculated from corpus: 714 unique base words / 881 total = 81.04%
 const UNIQUE_WORD_ESTIMATE_PERCENT = 0.8104;
+
+// Vocabulary milestone levels
+const VOCAB_MILESTONES = [
+  { threshold: 100, name: "Bronze", color: "#cd7f32" },
+  { threshold: 500, name: "Silver", color: "#c0c0c0" },
+  { threshold: 1000, name: "Gold", color: "#ffd700" },
+  { threshold: 2000, name: "Platinum", color: "#e5e4e2" },
+  { threshold: 4000, name: "Diamond", color: "#b9f2ff" },
+];
+
+function getCurrentVocabLevel(knownWords) {
+  let currentLevel = null;
+  for (const milestone of VOCAB_MILESTONES) {
+    if (knownWords >= milestone.threshold) {
+      currentLevel = milestone;
+    } else {
+      break;
+    }
+  }
+  return currentLevel;
+}
 
 const state = {
   api: new ApiClient(localStorage.getItem("api_base_url") || ""),
@@ -206,9 +231,12 @@ const state = {
   srsDailyNewRemaining: 0,
   srsAvailableNewCount: 0,
   srsDailyResetAt: "",
+  srsUndoHistory: [], // Stack of {card, result, definitions, mnemonic}
+  srsCardFlipped: false,
   progressRange: "month",
-  progressShowUnique: false,
+  progressShowUnique: true,
   progressChart: null,
+  wordsReadChart: null,
   requestVersion: {
     users: 0,
     texts: 0,
@@ -221,6 +249,7 @@ const state = {
     srsDetails: 0,
     srsReview: 0,
     progressHistory: 0,
+    wordsReadHistory: 0,
   },
 };
 
@@ -304,12 +333,14 @@ const el = {
   sectionProgress: document.getElementById("section-progress"),
   progressState: document.getElementById("progress-state"),
   progressChartCanvas: document.getElementById("progress-chart"),
+  progressLevel: document.getElementById("progress-level"),
+  wordsReadChartCanvas: document.getElementById("words-read-chart"),
+  wordsReadState: document.getElementById("words-read-state"),
   progressRangeBtns: [
     document.getElementById("progress-range-month"),
     document.getElementById("progress-range-year"),
     document.getElementById("progress-range-all"),
   ],
-  progressUniqueToggle: document.getElementById("progress-unique-toggle"),
 };
 const VIEW_ORDER = ["library", "reader", "words", "srs"];
 
@@ -419,6 +450,7 @@ function switchView(view) {
   }
   if (view === "progress" && state.isLoggedIn) {
     void loadProgressData();
+    void loadWordsReadData();
   }
   if (view !== "reader") {
     clearWordDetailsPanel();
@@ -718,7 +750,9 @@ function clearUserScopedViews() {
   state.progressShowUnique = false;
   if (el.progressUniqueToggle) el.progressUniqueToggle.checked = false;
   if (state.progressChart) { state.progressChart.destroy(); state.progressChart = null; }
+  if (state.wordsReadChart) { state.wordsReadChart.destroy(); state.wordsReadChart = null; }
   setStateMessage(el.progressState, "");
+  setStateMessage(el.wordsReadState, "");
 }
 
 function clearSrsState() {
@@ -731,6 +765,8 @@ function clearSrsState() {
   state.srsDailyNewRemaining = 0;
   state.srsAvailableNewCount = 0;
   state.srsDailyResetAt = "";
+  state.srsUndoHistory = [];
+  state.srsCardFlipped = false;
   el.srsMeta.textContent = "No session loaded";
   setStateMessage(el.srsState, "");
   renderSrs();
@@ -801,10 +837,15 @@ function renderSrs() {
   }
 
   el.srsFrontWord.textContent = state.srsCurrentCard.display_word || state.srsCurrentCard.normalized_word;
+
+  // Manage flip card state
+  const flipCard = document.querySelector(".srs-card-flip");
+  if (flipCard) {
+    flipCard.classList.toggle("flipped", state.srsRevealed);
+  }
+
+  // Manage reveal content
   el.srsReveal.classList.toggle("is-hidden", !state.srsRevealed);
-  el.srsShow.disabled = state.srsRevealed;
-  el.srsWrong.disabled = !state.srsRevealed;
-  el.srsRight.disabled = !state.srsRevealed;
   if (state.srsRevealed) {
     renderSrsDefinitions();
     renderSrsMnemonic();
@@ -820,6 +861,8 @@ function applySrsSessionData(cards, data) {
   state.srsDailyNewRemaining = data.daily_new_remaining || 0;
   state.srsAvailableNewCount = data.available_new_count || 0;
   state.srsDailyResetAt = data.daily_reset_at || "";
+  state.srsUndoHistory = [];
+  state.srsCardFlipped = false;
 }
 
 async function loadSrsSession() {
@@ -896,6 +939,14 @@ async function submitSrsResult(result) {
     if (!isCurrentRequest("srsReview", requestVersion)) {
       return;
     }
+    // Save to undo history before moving to next card
+    state.srsUndoHistory.push({
+      card,
+      result,
+      definitions: [...state.srsDefinitions],
+      mnemonic: state.srsMnemonic,
+    });
+
     if (result === "wrong") {
       srsReinsertWrongCard(card);
     }
@@ -903,6 +954,7 @@ async function submitSrsResult(result) {
     state.srsRevealed = false;
     state.srsDefinitions = [];
     state.srsMnemonic = null;
+    state.srsCardFlipped = false;
     setStateMessage(el.srsState, "");
     renderSrs();
   } catch (err) {
@@ -910,6 +962,48 @@ async function submitSrsResult(result) {
       return;
     }
     setStateMessage(el.srsState, `Review failed: ${String(err.message || err)}`, true);
+  }
+}
+
+async function undoSrsReview() {
+  if (state.srsUndoHistory.length === 0) {
+    return;
+  }
+
+  const undoEntry = state.srsUndoHistory.pop();
+  const requestVersion = nextRequestVersion("srsUndo");
+
+  try {
+    // Reverse the previous submission
+    const reverseResult = undoEntry.result === "wrong" ? "right" : "wrong";
+    await state.api.submitSrsReview(state.activeUserId, undoEntry.card.normalized_word, reverseResult);
+
+    if (!isCurrentRequest("srsUndo", requestVersion)) {
+      return;
+    }
+
+    // Restore the card to the queue
+    state.srsDueQueue.unshift(state.srsCurrentCard);
+    state.srsCurrentCard = undoEntry.card;
+    state.srsRevealed = true;
+    state.srsDefinitions = undoEntry.definitions;
+    state.srsMnemonic = undoEntry.mnemonic;
+    state.srsCardFlipped = true;
+
+    setStateMessage(el.srsState, "Undo successful");
+    renderSrs();
+
+    // Clear the message after 2 seconds
+    setTimeout(() => {
+      if (state.currentView === "srs") {
+        setStateMessage(el.srsState, "");
+      }
+    }, 2000);
+  } catch (err) {
+    if (!isCurrentRequest("srsUndo", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.srsState, `Undo failed: ${String(err.message || err)}`, true);
   }
 }
 
@@ -931,6 +1025,27 @@ async function loadProgressData() {
       return;
     }
     setStateMessage(el.progressState, String(err.message || err), true);
+  }
+}
+
+async function loadWordsReadData() {
+  const requestVersion = nextRequestVersion("wordsReadHistory");
+  if (!state.activeUserId) {
+    setStateMessage(el.wordsReadState, "Select a user first");
+    return;
+  }
+  setStateMessage(el.wordsReadState, "Loading...");
+  try {
+    const data = await state.api.getWordsReadHistory(state.activeUserId, state.progressRange);
+    if (!isCurrentRequest("wordsReadHistory", requestVersion)) {
+      return;
+    }
+    renderWordsReadChart(data);
+  } catch (err) {
+    if (!isCurrentRequest("wordsReadHistory", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.wordsReadState, String(err.message || err), true);
   }
 }
 
@@ -1430,13 +1545,41 @@ function renderProgressChart(data) {
   let knownData = data.buckets.map(b => b.cumulative_known);
   const encounterData = data.buckets.map(b => b.cumulative_encountered);
 
-  // Apply unique word estimate if toggled
-  if (state.progressShowUnique) {
-    knownData = knownData.map(k => Math.round(k * UNIQUE_WORD_ESTIMATE_PERCENT));
-  }
+  // Always apply unique word estimate
+  knownData = knownData.map(k => Math.round(k * UNIQUE_WORD_ESTIMATE_PERCENT));
 
-  const knownLabel = state.progressShowUnique ? "Known Words (Unique Est.)" : "Known Words";
+  const knownLabel = "Known Words (Unique Est.)";
+  const maxKnown = Math.max(...knownData, 0);
+  const currentLevel = getCurrentVocabLevel(maxKnown);
   const ctx = el.progressChartCanvas.getContext("2d");
+
+  // Plugin to draw milestone lines
+  const milestonesPlugin = {
+    id: "milestonesPlugin",
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      const yAxis = chart.scales.y;
+      const xStart = chart.chartArea.left;
+      const xEnd = chart.chartArea.right;
+
+      // Draw lines only for milestones that are visible
+      VOCAB_MILESTONES.forEach(milestone => {
+        const yValue = yAxis.getPixelForValue(milestone.threshold);
+        if (yValue >= chart.chartArea.top && yValue <= chart.chartArea.bottom) {
+          ctx.save();
+          ctx.strokeStyle = milestone.color;
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.3;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(xStart, yValue);
+          ctx.lineTo(xEnd, yValue);
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+    },
+  };
 
   if (state.progressChart) {
     state.progressChart.data.labels = labels;
@@ -1476,6 +1619,7 @@ function renderProgressChart(data) {
             display: true,
             position: "top",
           },
+          milestonesPlugin: {},
         },
         scales: {
           y: {
@@ -1484,9 +1628,59 @@ function renderProgressChart(data) {
           },
         },
       },
+      plugins: [milestonesPlugin],
     });
   }
   setStateMessage(el.progressState, "");
+
+  // Display current level
+  if (el.progressLevel) {
+    if (currentLevel) {
+      el.progressLevel.textContent = `Current: ${currentLevel.name} (${maxKnown} words)`;
+    } else {
+      el.progressLevel.textContent = `${maxKnown} words learned`;
+    }
+  }
+}
+
+function renderWordsReadChart(data) {
+  const labels = data.buckets.map(b => b.date);
+  const wordsData = data.buckets.map(b => b.cumulative_words);
+  const ctx = el.wordsReadChartCanvas.getContext("2d");
+
+  if (state.wordsReadChart) {
+    state.wordsReadChart.data.labels = labels;
+    state.wordsReadChart.data.datasets[0].data = wordsData;
+    state.wordsReadChart.update();
+  } else {
+    state.wordsReadChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Words Read (cumulative)",
+            data: wordsData,
+            borderColor: "#60a5fa",
+            backgroundColor: "rgba(96, 165, 250, 0.1)",
+            fill: "origin",
+            tension: 0.3,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: true, position: "top" },
+        },
+        scales: {
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  }
+  setStateMessage(el.wordsReadState, "");
 }
 
 async function renderBackupStatus() {
@@ -1755,13 +1949,7 @@ for (const btn of el.progressRangeBtns) {
     state.progressRange = btn.dataset.range;
     el.progressRangeBtns.forEach(b => b.classList.toggle("active", b === btn));
     void loadProgressData();
-  };
-}
-
-if (el.progressUniqueToggle) {
-  el.progressUniqueToggle.onchange = () => {
-    state.progressShowUnique = el.progressUniqueToggle.checked;
-    void loadProgressData();
+    void loadWordsReadData();
   };
 }
 
@@ -1984,17 +2172,40 @@ el.generateMeaningForm.onsubmit = async (event) => {
   }
 };
 
-el.srsShow.onclick = () => {
-  void revealSrsCard();
-};
+// Keyboard controls for SRS
+document.addEventListener("keydown", (event) => {
+  if (state.currentView !== "srs" || !state.srsCurrentCard) {
+    return;
+  }
 
-el.srsWrong.onclick = () => {
-  void submitSrsResult("wrong");
-};
+  // Space: flip card
+  if (event.code === "Space" && !state.srsRevealed) {
+    event.preventDefault();
+    void revealSrsCard();
+    return;
+  }
 
-el.srsRight.onclick = () => {
-  void submitSrsResult("right");
-};
+  // 0: wrong (only when revealed)
+  if (event.key === "0" && state.srsRevealed) {
+    event.preventDefault();
+    void submitSrsResult("wrong");
+    return;
+  }
+
+  // 1: right (only when revealed)
+  if (event.key === "1" && state.srsRevealed) {
+    event.preventDefault();
+    void submitSrsResult("right");
+    return;
+  }
+
+  // Ctrl+Z: undo
+  if ((event.ctrlKey || event.metaKey) && event.key === "z" && state.srsUndoHistory.length > 0) {
+    event.preventDefault();
+    void undoSrsReview();
+    return;
+  }
+});
 
 el.srsAddNewForm.onsubmit = async (event) => {
   event.preventDefault();

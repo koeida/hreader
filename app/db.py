@@ -120,6 +120,19 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_user_text_positions_user_text ON user_text_positions(user_id, text_id);
         CREATE INDEX IF NOT EXISTS idx_srs_cards_user_due ON srs_cards(user_id, is_introduced, due_at);
         CREATE INDEX IF NOT EXISTS idx_srs_cards_user_new ON srs_cards(user_id, is_new, created_at);
+
+        CREATE TABLE IF NOT EXISTS sentences_read (
+            user_id TEXT NOT NULL,
+            text_id TEXT NOT NULL,
+            sentence_index INTEGER NOT NULL,
+            word_count INTEGER NOT NULL DEFAULT 0,
+            read_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, text_id, sentence_index),
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY(text_id) REFERENCES texts(text_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sentences_read_user_date ON sentences_read(user_id, read_at);
         """
     )
     conn.commit()
