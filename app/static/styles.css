@@ -652,6 +652,57 @@ textarea:focus-visible {
   background: #e6e9f6;
 }
 
+.sentence-ai-tools {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.ai-tool-btn {
+  background: linear-gradient(135deg, #f0f6ff 0%, #e6eeff 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--accent-strong);
+  font-size: 0.84rem;
+  font-weight: 500;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.ai-tool-btn:hover {
+  background: linear-gradient(135deg, #ddeaff 0%, #cfdeff 100%);
+  border-color: var(--accent);
+}
+
+.ai-tool-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ai-panel {
+  margin-top: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f7faff;
+  padding: 0.65rem 0.75rem;
+}
+
+.ai-panel-label {
+  color: #2852a8;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.ai-panel-text {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
 .word-details-panel {
   margin-top: 0.72rem;
   border: 1px solid var(--border);
@@ -860,6 +911,37 @@ textarea:focus-visible {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.words-read-summary {
+  display: flex;
+  gap: 1.5rem;
+  margin: 0.5rem 0 0.75rem;
+  flex-wrap: wrap;
+}
+
+.words-read-summary:empty {
+  display: none;
+}
+
+.words-read-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.words-read-stat .stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.words-read-stat .stat-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 /* ==================== SRS Keyboard-Only Interface ==================== */

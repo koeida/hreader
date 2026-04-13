@@ -151,6 +151,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "language" not in cols:
         _run_language_migration(conn)
 
+    sr_cols = {row[1] for row in conn.execute("PRAGMA table_info(sentences_read)")}
+    if "nikkud_off" not in sr_cols:
+        conn.execute("ALTER TABLE sentences_read ADD COLUMN nikkud_off INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+
 
 def _run_language_migration(conn: sqlite3.Connection) -> None:
     # Simple ALTER TABLE for tables that just need a new column

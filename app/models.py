@@ -229,8 +229,34 @@ class ProgressHistoryResponse(BaseModel):
 class WordsReadBucket(BaseModel):
     date: str
     cumulative_words: int
+    cumulative_words_nikkud_off: int
 
 
 class WordsReadHistoryResponse(BaseModel):
     range: str
     buckets: list[WordsReadBucket]
+
+
+class WordsReadSummary(BaseModel):
+    words_today: int
+    daily_rate_14d: float
+    projected_month: int
+    projected_year: int
+
+
+class SrsHistoryBucket(BaseModel):
+    date: str
+    stage0: int
+    stage1: int
+    stage2: int
+    stage3: int
+    stage4_plus: int
+
+
+class SrsHistoryResponse(BaseModel):
+    range: str
+    buckets: list[SrsHistoryBucket]
+
+
+class SentenceAnalysisResponse(BaseModel):
+    text: str

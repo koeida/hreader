@@ -26,6 +26,7 @@ from app.models import (
     MeaningUpdateRequest,
     ProgressBucket,
     ProgressHistoryResponse,
+    SentenceAnalysisResponse,
     SentenceResponse,
     SentenceTokenResponse,
     SrsCardResponse,
@@ -50,8 +51,11 @@ from app.models import (
     WordStateResponse,
     WordStateUpdateRequest,
     WordsListResponse,
+    SrsHistoryBucket,
+    SrsHistoryResponse,
     WordsReadBucket,
     WordsReadHistoryResponse,
+    WordsReadSummary,
 )
 from app.tokenizer import NIKKUD_RE, normalize_token, tokenize_eligible
 
@@ -247,10 +251,10 @@ def _bucket_words_read(rows: list[Any], range_key: str) -> list[WordsReadBucket]
     if not rows:
         return []
 
-    events: list[tuple[date, int]] = []
+    events: list[tuple[date, int, bool]] = []
     for row in rows:
         read_date = datetime.fromisoformat(row["read_at"].replace("Z", "+00:00")).date()
-        events.append((read_date, row["word_count"]))
+        events.append((read_date, row["word_count"], bool(row["nikkud_off"])))
 
     today = datetime.now(UTC).date()
 
@@ -279,8 +283,9 @@ def _bucket_words_read(rows: list[Any], range_key: str) -> list[WordsReadBucket]
                 d = d.replace(month=d.month + 1)
 
     bucket_words: dict[str, int] = {key: 0 for key in bucket_keys}
+    bucket_words_nikkud_off: dict[str, int] = {key: 0 for key in bucket_keys}
 
-    for event_date, word_count in events:
+    for event_date, word_count, nikkud_off in events:
         if range_key == "month":
             key = event_date.isoformat()
         elif range_key == "year":
@@ -290,12 +295,123 @@ def _bucket_words_read(rows: list[Any], range_key: str) -> list[WordsReadBucket]
             key = event_date.isoformat()[:7]
         if key in bucket_words:
             bucket_words[key] += word_count
+            if nikkud_off:
+                bucket_words_nikkud_off[key] += word_count
 
     cumulative = 0
+    cumulative_nikkud_off = 0
     result: list[WordsReadBucket] = []
     for key in bucket_keys:
         cumulative += bucket_words[key]
-        result.append(WordsReadBucket(date=key, cumulative_words=cumulative))
+        cumulative_nikkud_off += bucket_words_nikkud_off[key]
+        result.append(WordsReadBucket(date=key, cumulative_words=cumulative, cumulative_words_nikkud_off=cumulative_nikkud_off))
+
+    return result
+
+
+def _stage_at_date(
+    stage_index: int,
+    introduced_date: date,
+    last_reviewed_date: date | None,
+    query_date: date,
+) -> int | None:
+    """Estimate which stage a card was at on query_date.
+
+    Returns None if not yet introduced. Reconstructs stage transition dates by
+    working backwards from last_reviewed_at using the SRS interval schedule:
+    SRS_INTERVAL_DAYS[s-2] is the interval that placed the card at stage s,
+    so that's how far back we step to find when stage s-1 began.
+    """
+    if query_date < introduced_date:
+        return None
+    if last_reviewed_date is None or stage_index == 0:
+        return 0
+
+    S = stage_index
+    # Build list of (start_date, stage) by stepping backwards from last_reviewed_date
+    transitions: list[tuple[date, int]] = [(last_reviewed_date, S)]
+    T = last_reviewed_date
+    for s in range(S, 1, -1):
+        T = T - timedelta(days=SRS_INTERVAL_DAYS[s - 2])
+        transitions.append((T, s - 1))
+    transitions.append((introduced_date, 0))
+    transitions.sort()  # ascending by date
+
+    result_stage = 0
+    for start_date, stage in transitions:
+        if start_date <= query_date:
+            result_stage = stage
+        else:
+            break
+    return result_stage
+
+
+def _bucket_srs_history(rows: list[Any], range_key: str) -> list[SrsHistoryBucket]:
+    """Generate SRS stage distribution snapshots over time.
+
+    For each time bucket, reconstructs how many cards were at each stage on
+    that date using backwards estimation from last_reviewed_at and the SRS intervals.
+    """
+    # Parse introduced cards only
+    cards: list[tuple[date, int, date | None]] = []
+    for row in rows:
+        if not row["introduced_at"]:
+            continue
+        intro_date = datetime.fromisoformat(row["introduced_at"].replace("Z", "+00:00")).date()
+        stage = int(row["stage_index"])
+        last_rev: date | None = None
+        if row["last_reviewed_at"]:
+            last_rev = datetime.fromisoformat(row["last_reviewed_at"].replace("Z", "+00:00")).date()
+        cards.append((intro_date, stage, last_rev))
+
+    if not cards:
+        return []
+
+    today = datetime.now(UTC).date()
+
+    # Generate bucket (key, representative_date) pairs
+    buckets: list[tuple[str, date]] = []
+    if range_key == "month":
+        for i in range(29, -1, -1):
+            d = today - timedelta(days=i)
+            buckets.append((d.isoformat(), d))
+    elif range_key == "year":
+        seen: set[str] = set()
+        for i in range(51, -1, -1):
+            d = today - timedelta(weeks=i)
+            d_monday = d - timedelta(days=d.weekday())
+            key = f"{d_monday.isocalendar().year}-W{d_monday.isocalendar().week:02d}"
+            if key not in seen:
+                seen.add(key)
+                buckets.append((key, d_monday))
+    else:
+        min_date = min(c[0] for c in cards)
+        d = min_date.replace(day=1)
+        while d <= today and len(buckets) < 120:
+            buckets.append((d.isoformat()[:7], d))
+            if d.month == 12:
+                d = d.replace(year=d.year + 1, month=1)
+            else:
+                d = d.replace(month=d.month + 1)
+
+    result: list[SrsHistoryBucket] = []
+    for key, bucket_date in buckets:
+        counts = [0, 0, 0, 0, 0]  # indices 0-3 = stages 0-3, index 4 = stage 4+
+        for intro_date, stage_index, last_rev in cards:
+            s = _stage_at_date(stage_index, intro_date, last_rev, bucket_date)
+            if s is None:
+                continue
+            counts[min(s, 4)] += 1
+        result.append(
+            SrsHistoryBucket(
+                date=key,
+                stage0=counts[0],
+                stage1=counts[1],
+                stage2=counts[2],
+                stage3=counts[3],
+                stage4_plus=counts[4],
+            )
+        )
 
     return result
 
@@ -901,6 +1017,76 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             ],
         )
 
+    @app.post("/v1/users/{user_id}/texts/{text_id}/sentences/{sentence_index}/nikkud-off")
+    def mark_sentence_nikkud_off(user_id: str, text_id: str, sentence_index: int, conn: Any = Depends(get_conn)) -> dict:
+        user_id = ensure_uuid(user_id, "user_id")
+        text_id = ensure_uuid(text_id, "text_id")
+        ensure_active_user(conn, user_id)
+        conn.execute(
+            "UPDATE sentences_read SET nikkud_off = 1 WHERE user_id = ? AND text_id = ? AND sentence_index = ?",
+            (user_id, text_id, sentence_index),
+        )
+        conn.commit()
+        return {"ok": True}
+
+    @app.post("/v1/users/{user_id}/texts/{text_id}/sentences/{sentence_index}/restate", response_model=SentenceAnalysisResponse)
+    def restate_sentence(user_id: str, text_id: str, sentence_index: int, conn: Any = Depends(get_conn)) -> SentenceAnalysisResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        text_id = ensure_uuid(text_id, "text_id")
+        ensure_active_user(conn, user_id)
+        text_row = ensure_user_text(conn, user_id, text_id)
+        text_language = text_row["language"] if "language" in text_row.keys() else "hebrew"
+
+        row = conn.execute(
+            "SELECT sentence_text FROM text_sentences WHERE text_id = ? AND sentence_index = ?",
+            (text_id, sentence_index),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="sentence_not_found")
+
+        sentence_text = row["sentence_text"]
+        context_start = max(0, sentence_index - 10)
+        context_rows = conn.execute(
+            "SELECT sentence_text FROM text_sentences WHERE text_id = ? AND sentence_index >= ? AND sentence_index < ? ORDER BY sentence_index ASC",
+            (text_id, context_start, sentence_index),
+        ).fetchall()
+        context_sentences = [r["sentence_text"] for r in context_rows]
+
+        try:
+            text = app.state.meaning_generator.generate_restatement(sentence_text, context_sentences, text_language)
+        except MeaningGenerationError as exc:
+            msg = str(exc)
+            if msg == "meaning_generation_timeout":
+                raise HTTPException(status_code=504, detail=msg) from exc
+            raise HTTPException(status_code=502, detail=msg) from exc
+
+        return SentenceAnalysisResponse(text=text)
+
+    @app.post("/v1/users/{user_id}/texts/{text_id}/sentences/{sentence_index}/grammar", response_model=SentenceAnalysisResponse)
+    def analyze_sentence_grammar(user_id: str, text_id: str, sentence_index: int, conn: Any = Depends(get_conn)) -> SentenceAnalysisResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        text_id = ensure_uuid(text_id, "text_id")
+        ensure_active_user(conn, user_id)
+        text_row = ensure_user_text(conn, user_id, text_id)
+        text_language = text_row["language"] if "language" in text_row.keys() else "hebrew"
+
+        row = conn.execute(
+            "SELECT sentence_text FROM text_sentences WHERE text_id = ? AND sentence_index = ?",
+            (text_id, sentence_index),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="sentence_not_found")
+
+        try:
+            text = app.state.meaning_generator.generate_grammar(row["sentence_text"], text_language)
+        except MeaningGenerationError as exc:
+            msg = str(exc)
+            if msg == "meaning_generation_timeout":
+                raise HTTPException(status_code=504, detail=msg) from exc
+            raise HTTPException(status_code=502, detail=msg) from exc
+
+        return SentenceAnalysisResponse(text=text)
+
     @app.put("/v1/users/{user_id}/words/{normalized_word}", response_model=WordStateResponse)
     def update_word_state(
         user_id: str,
@@ -1026,9 +1212,9 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND language = ? AND is_introduced = 1 AND due_at >= ? AND due_at < ?
+            WHERE user_id = ? AND language = ? AND is_introduced = 1 AND due_at < ?
             """,
-            (user_id, language, window_start_iso, window_end_iso),
+            (user_id, language, window_end_iso),
         ).fetchall()
         due_word_order = [row["normalized_word"] for row in due_rows]
         due_display_words = resolve_srs_display_words(conn, user_id, due_word_order, language)
@@ -1096,10 +1282,10 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             conn.execute(
                 f"""
                 UPDATE srs_cards
-                SET is_new = 0, is_introduced = 1, introduced_at = ?, updated_at = ?
+                SET is_new = 0, is_introduced = 1, due_at = ?, introduced_at = ?, updated_at = ?
                 WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders})
                 """,
-                (now_iso, now_iso, user_id, language, *selected_words),
+                (now_iso, now_iso, now_iso, user_id, language, *selected_words),
             )
             increment_daily_new_count(conn, user_id, window_start_iso, len(selected_words), language)
             conn.commit()
@@ -1421,15 +1607,20 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
 
         mnemonic = (payload.mnemonic or "").strip() or None
         now = utc_now_iso()
-        conn.execute(
-            """
-            INSERT INTO word_details (user_id, language, normalized_word, mnemonic, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id, language, normalized_word)
-            DO UPDATE SET mnemonic = excluded.mnemonic, updated_at = excluded.updated_at
-            """,
-            (user_id, language, normalized, mnemonic, now, now),
-        )
+        existing = conn.execute(
+            "SELECT id FROM word_details WHERE user_id = ? AND language = ? AND normalized_word = ?",
+            (user_id, language, normalized),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE word_details SET mnemonic = ?, updated_at = ? WHERE user_id = ? AND language = ? AND normalized_word = ?",
+                (mnemonic, now, user_id, language, normalized),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO word_details (user_id, language, normalized_word, mnemonic, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, language, normalized, mnemonic, now, now),
+            )
         conn.commit()
         row = conn.execute(
             """
@@ -1480,7 +1671,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         # words-read is text-based; filter by texts of the given language
         rows = conn.execute(
             """
-            SELECT sr.word_count, sr.read_at
+            SELECT sr.word_count, sr.read_at, sr.nikkud_off
             FROM sentences_read sr
             JOIN texts t ON t.text_id = sr.text_id
             WHERE sr.user_id = ? AND t.language = ?
@@ -1488,6 +1679,69 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             (user_id, language),
         ).fetchall()
         return WordsReadHistoryResponse(range=range, buckets=_bucket_words_read(rows, range))
+
+    @app.get("/v1/users/{user_id}/progress/words-read-summary", response_model=WordsReadSummary)
+    def words_read_summary(
+        user_id: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> WordsReadSummary:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        today = datetime.now(UTC).date()
+        fourteen_days_ago = today - timedelta(days=14)
+        words_today: int = conn.execute(
+            """
+            SELECT COALESCE(SUM(sr.word_count), 0)
+            FROM sentences_read sr
+            JOIN texts t ON t.text_id = sr.text_id
+            WHERE sr.user_id = ? AND t.language = ?
+              AND date(sr.read_at) = ?
+            """,
+            (user_id, language, today.isoformat()),
+        ).fetchone()[0]
+        words_14d: int = conn.execute(
+            """
+            SELECT COALESCE(SUM(sr.word_count), 0)
+            FROM sentences_read sr
+            JOIN texts t ON t.text_id = sr.text_id
+            WHERE sr.user_id = ? AND t.language = ?
+              AND date(sr.read_at) >= ?
+            """,
+            (user_id, language, fourteen_days_ago.isoformat()),
+        ).fetchone()[0]
+        daily_rate = words_14d / 14.0
+        return WordsReadSummary(
+            words_today=words_today,
+            daily_rate_14d=round(daily_rate, 1),
+            projected_month=round(daily_rate * 30),
+            projected_year=round(daily_rate * 365),
+        )
+
+    @app.get("/v1/users/{user_id}/progress/srs-history", response_model=SrsHistoryResponse)
+    def srs_history(
+        user_id: str,
+        range: str = Query(default="month"),
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> SrsHistoryResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        if range not in ("month", "year", "all"):
+            raise HTTPException(status_code=400, detail="invalid_range")
+        rows = conn.execute(
+            "SELECT stage_index, introduced_at, last_reviewed_at FROM srs_cards WHERE user_id = ? AND language = ? AND is_introduced = 1",
+            (user_id, language),
+        ).fetchall()
+        return SrsHistoryResponse(range=range, buckets=_bucket_srs_history(rows, range))
 
     return app
 

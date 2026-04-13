@@ -76,6 +76,10 @@ class ApiClient {
     return this.request(`/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}`, { method: "GET" });
   }
 
+  markSentenceNikkudOff(userId, textId, sentenceIndex) {
+    return this.request(`/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}/nikkud-off`, { method: "POST" });
+  }
+
   getTextPosition(userId, textId) {
     return this.request(`/v1/users/${userId}/texts/${textId}/position`, { method: "GET" });
   }
@@ -111,6 +115,14 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify({ meaning_text: meaningText }),
     });
+  }
+
+  restateSentence(userId, textId, sentenceIndex) {
+    return this.request(`/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}/restate`, { method: "POST" });
+  }
+
+  analyzeSentenceGrammar(userId, textId, sentenceIndex) {
+    return this.request(`/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}/grammar`, { method: "POST" });
   }
 
   generateMeaning(userId, normalizedWord, sentenceContext, language = "hebrew") {
@@ -178,6 +190,14 @@ class ApiClient {
   getWordsReadHistory(userId, range, language = "hebrew") {
     return this.request(`/v1/users/${userId}/progress/words-read?range=${encodeURIComponent(range)}&language=${encodeURIComponent(language)}`, { method: "GET" });
   }
+
+  getSrsHistory(userId, range, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/progress/srs-history?range=${encodeURIComponent(range)}&language=${encodeURIComponent(language)}`, { method: "GET" });
+  }
+
+  getWordsReadSummary(userId, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/progress/words-read-summary?language=${encodeURIComponent(language)}`, { method: "GET" });
+  }
 }
 
 // Percentage of words that are unique (not just variants with prefixes)
@@ -222,6 +242,7 @@ const state = {
   currentLanguage: localStorage.getItem("current_language") || "hebrew",
   isLoggedIn: !!localStorage.getItem("active_user_id"),
   selectedTextId: null,
+  readerShowNikkud: false,
   srsDueQueue: [],
   srsCurrentCard: null,
   srsRevealed: false,
@@ -237,6 +258,7 @@ const state = {
   progressShowUnique: true,
   progressChart: null,
   wordsReadChart: null,
+  srsHistoryChart: null,
   requestVersion: {
     users: 0,
     texts: 0,
@@ -250,6 +272,7 @@ const state = {
     srsReview: 0,
     progressHistory: 0,
     wordsReadHistory: 0,
+    srsHistory: 0,
   },
 };
 
@@ -286,6 +309,12 @@ const el = {
   readerSentence: document.getElementById("reader-sentence"),
   prevSentence: document.getElementById("prev-sentence"),
   nextSentence: document.getElementById("next-sentence"),
+  btnRestate: document.getElementById("btn-restate"),
+  btnGrammar: document.getElementById("btn-grammar"),
+  restatePanel: document.getElementById("restate-panel"),
+  grammarPanel: document.getElementById("grammar-panel"),
+  restateText: document.getElementById("restate-text"),
+  grammarText: document.getElementById("grammar-text"),
   wordDetailsPanel: document.getElementById("word-details-panel"),
   wordDetailsWord: document.getElementById("word-details-word"),
   wordDetailsStatus: document.getElementById("word-details-status"),
@@ -336,6 +365,9 @@ const el = {
   progressLevel: document.getElementById("progress-level"),
   wordsReadChartCanvas: document.getElementById("words-read-chart"),
   wordsReadState: document.getElementById("words-read-state"),
+  wordsReadSummary: document.getElementById("words-read-summary"),
+  srsHistoryChartCanvas: document.getElementById("srs-history-chart"),
+  srsHistoryState: document.getElementById("srs-history-state"),
   progressRangeBtns: [
     document.getElementById("progress-range-month"),
     document.getElementById("progress-range-year"),
@@ -451,6 +483,8 @@ function switchView(view) {
   if (view === "progress" && state.isLoggedIn) {
     void loadProgressData();
     void loadWordsReadData();
+    void loadWordsReadSummary();
+    void loadSrsHistoryData();
   }
   if (view !== "reader") {
     clearWordDetailsPanel();
@@ -540,7 +574,12 @@ function handleLanguageSwitch(lang) {
   updateDirectionAttributes();
   void loadTexts();
   if (state.currentView === "srs") void loadSrsSession();
-  if (state.currentView === "progress") void loadProgressData();
+  if (state.currentView === "progress") {
+    void loadProgressData();
+    void loadWordsReadData();
+    void loadWordsReadSummary();
+    void loadSrsHistoryData();
+  }
 }
 
 function colorForPercentage(pct) {
@@ -794,8 +833,11 @@ function clearUserScopedViews() {
   if (el.progressUniqueToggle) el.progressUniqueToggle.checked = false;
   if (state.progressChart) { state.progressChart.destroy(); state.progressChart = null; }
   if (state.wordsReadChart) { state.wordsReadChart.destroy(); state.wordsReadChart = null; }
+  if (state.srsHistoryChart) { state.srsHistoryChart.destroy(); state.srsHistoryChart = null; }
   setStateMessage(el.progressState, "");
   setStateMessage(el.wordsReadState, "");
+  setStateMessage(el.srsHistoryState, "");
+  if (el.wordsReadSummary) el.wordsReadSummary.innerHTML = "";
 }
 
 function clearSrsState() {
@@ -821,8 +863,11 @@ function timezoneOffsetMinutes() {
 
 function srsReinsertWrongCard(card) {
   if (!card) return;
-  if (state.srsDueQueue.length >= 2) {
-    state.srsDueQueue.splice(2, 0, card);
+  const len = state.srsDueQueue.length;
+  if (len >= 2) {
+    // Insert at a random position between index 2 and end (inclusive)
+    const insertAt = 2 + Math.floor(Math.random() * (len - 1));
+    state.srsDueQueue.splice(insertAt, 0, card);
     return;
   }
   state.srsDueQueue.push(card);
@@ -1092,6 +1137,60 @@ async function loadWordsReadData() {
   }
 }
 
+async function loadWordsReadSummary() {
+  if (!state.activeUserId || !el.wordsReadSummary) return;
+  try {
+    const data = await state.api.getWordsReadSummary(state.activeUserId, state.currentLanguage);
+    renderWordsReadSummary(data);
+  } catch (_) {
+    // non-critical, silently ignore
+  }
+}
+
+function renderWordsReadSummary(data) {
+  if (!el.wordsReadSummary) return;
+  const fmt = (n) => n.toLocaleString();
+  el.wordsReadSummary.innerHTML = `
+    <div class="words-read-stat">
+      <span class="stat-value">${fmt(data.words_today)}</span>
+      <span class="stat-label">Words today</span>
+    </div>
+    <div class="words-read-stat">
+      <span class="stat-value">${fmt(Math.round(data.daily_rate_14d))}</span>
+      <span class="stat-label">Daily avg (14d)</span>
+    </div>
+    <div class="words-read-stat">
+      <span class="stat-value">${fmt(data.projected_month)}</span>
+      <span class="stat-label">Projected / month</span>
+    </div>
+    <div class="words-read-stat">
+      <span class="stat-value">${fmt(data.projected_year)}</span>
+      <span class="stat-label">Projected / year</span>
+    </div>
+  `;
+}
+
+async function loadSrsHistoryData() {
+  const requestVersion = nextRequestVersion("srsHistory");
+  if (!state.activeUserId) {
+    setStateMessage(el.srsHistoryState, "Select a user first");
+    return;
+  }
+  setStateMessage(el.srsHistoryState, "Loading...");
+  try {
+    const data = await state.api.getSrsHistory(state.activeUserId, state.progressRange, state.currentLanguage);
+    if (!isCurrentRequest("srsHistory", requestVersion)) {
+      return;
+    }
+    renderSrsHistoryChart(data);
+  } catch (err) {
+    if (!isCurrentRequest("srsHistory", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.srsHistoryState, String(err.message || err), true);
+  }
+}
+
 async function loadUsers() {
   const requestVersion = nextRequestVersion("users");
   renderListState(el.usersList, el.usersState, { loading: true });
@@ -1345,14 +1444,22 @@ function animateSelectionPulse() {
   }
 }
 
+function clearSentenceAiPanels() {
+  el.restatePanel.classList.add("is-hidden");
+  el.grammarPanel.classList.add("is-hidden");
+  el.restateText.textContent = "";
+  el.grammarText.textContent = "";
+}
+
 function renderSentence(data = state.currentSentence) {
   if (!data) {
     el.readerSentence.textContent = "";
     return;
   }
 
+  clearSentenceAiPanels();
   state.currentSentence = data;
-  el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index}`;
+  el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index} | Nikkud: ${state.readerShowNikkud ? "on (F3)" : "off (F3)"}`;
   el.prevSentence.disabled = data.prev_sentence_index === null;
   el.nextSentence.disabled = data.next_sentence_index === null;
   el.prevSentence.dataset.target = data.prev_sentence_index;
@@ -1394,7 +1501,7 @@ function renderSentence(data = state.currentSentence) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `sentence-word ${tokenState}`;
-      btn.textContent = part;
+      btn.textContent = state.readerShowNikkud ? part : part.replace(NIKKUD_RE, "");
       const wordButtonId = `${normalized}:${clickableWordIndex}`;
       clickableWordIndex += 1;
       btn.dataset.wordButtonId = wordButtonId;
@@ -1689,11 +1796,13 @@ function renderProgressChart(data) {
 function renderWordsReadChart(data) {
   const labels = data.buckets.map(b => b.date);
   const wordsData = data.buckets.map(b => b.cumulative_words);
+  const nikkudOffData = data.buckets.map(b => b.cumulative_words_nikkud_off);
   const ctx = el.wordsReadChartCanvas.getContext("2d");
 
   if (state.wordsReadChart) {
     state.wordsReadChart.data.labels = labels;
     state.wordsReadChart.data.datasets[0].data = wordsData;
+    state.wordsReadChart.data.datasets[1].data = nikkudOffData;
     state.wordsReadChart.update();
   } else {
     state.wordsReadChart = new Chart(ctx, {
@@ -1706,6 +1815,14 @@ function renderWordsReadChart(data) {
             data: wordsData,
             borderColor: "#60a5fa",
             backgroundColor: "rgba(96, 165, 250, 0.1)",
+            fill: "origin",
+            tension: 0.3,
+          },
+          {
+            label: "Words Read without Nikkud (cumulative)",
+            data: nikkudOffData,
+            borderColor: "#f97316",
+            backgroundColor: "rgba(249, 115, 22, 0.1)",
             fill: "origin",
             tension: 0.3,
           },
@@ -1724,6 +1841,57 @@ function renderWordsReadChart(data) {
     });
   }
   setStateMessage(el.wordsReadState, "");
+}
+
+function renderSrsHistoryChart(data) {
+  const buckets = data.buckets;
+  const labels = buckets.map(b => b.date);
+
+  // Mature stages listed first so they stack at the bottom of the area chart
+  const seriesDefs = [
+    { label: "Stage 5+", key: "stage4_plus", color: "52, 211, 153" },
+    { label: "Stage 4",  key: "stage3",      color: "74, 222, 128" },
+    { label: "Stage 3",  key: "stage2",      color: "250, 204, 21" },
+    { label: "Stage 2",  key: "stage1",      color: "251, 146, 60" },
+    { label: "Stage 1",  key: "stage0",      color: "248, 113, 113" },
+  ];
+
+  const datasets = seriesDefs.map(s => ({
+    label: s.label,
+    data: buckets.map(b => b[s.key]),
+    borderColor: `rgba(${s.color}, 0.8)`,
+    backgroundColor: `rgba(${s.color}, 0.6)`,
+    fill: true,
+    tension: 0.3,
+    pointRadius: 0,
+  }));
+
+  const ctx = el.srsHistoryChartCanvas.getContext("2d");
+
+  if (state.srsHistoryChart) {
+    state.srsHistoryChart.data.labels = labels;
+    datasets.forEach((ds, i) => {
+      state.srsHistoryChart.data.datasets[i].data = ds.data;
+    });
+    state.srsHistoryChart.update();
+  } else {
+    state.srsHistoryChart = new Chart(ctx, {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: true, position: "top" },
+        },
+        scales: {
+          x: { stacked: true },
+          y: { stacked: true, beginAtZero: true, title: { display: true, text: "Cards" } },
+        },
+      },
+    });
+  }
+  setStateMessage(el.srsHistoryState, "");
 }
 
 async function renderBackupStatus() {
@@ -1993,6 +2161,8 @@ for (const btn of el.progressRangeBtns) {
     el.progressRangeBtns.forEach(b => b.classList.toggle("active", b === btn));
     void loadProgressData();
     void loadWordsReadData();
+    void loadWordsReadSummary();
+    void loadSrsHistoryData();
   };
 }
 
@@ -2094,7 +2264,11 @@ if (el.prevSentence) {
   el.prevSentence.onclick = async () => {
     if (!el.prevSentence.dataset.target) return;
     clearWordDetailsPanel();
+    if (!state.readerShowNikkud && state.currentSentence && state.activeUserId && state.openTextId) {
+      void state.api.markSentenceNikkudOff(state.activeUserId, state.openTextId, state.currentSentence.sentence_index);
+    }
     state.sentenceIndex = Number(el.prevSentence.dataset.target);
+    state.readerShowNikkud = false;
     await loadSentence();
   };
 }
@@ -2103,8 +2277,60 @@ if (el.nextSentence) {
   el.nextSentence.onclick = async () => {
     if (!el.nextSentence.dataset.target) return;
     clearWordDetailsPanel();
+    if (!state.readerShowNikkud && state.currentSentence && state.activeUserId && state.openTextId) {
+      void state.api.markSentenceNikkudOff(state.activeUserId, state.openTextId, state.currentSentence.sentence_index);
+    }
     state.sentenceIndex = Number(el.nextSentence.dataset.target);
+    state.readerShowNikkud = false;
     await loadSentence();
+  };
+}
+
+if (el.btnRestate) {
+  el.btnRestate.onclick = async () => {
+    if (!state.activeUserId || !state.openTextId || state.currentSentence == null) return;
+    const userId = state.activeUserId;
+    const textId = state.openTextId;
+    const sentenceIndex = state.currentSentence.sentence_index;
+    const origText = el.btnRestate.textContent;
+    el.btnRestate.disabled = true;
+    el.btnRestate.textContent = "Restating…";
+    el.restatePanel.classList.add("is-hidden");
+    try {
+      const data = await state.api.restateSentence(userId, textId, sentenceIndex);
+      el.restateText.textContent = data.text;
+      el.restatePanel.classList.remove("is-hidden");
+    } catch (err) {
+      el.restateText.textContent = `Error: ${String(err.message || err)}`;
+      el.restatePanel.classList.remove("is-hidden");
+    } finally {
+      el.btnRestate.disabled = false;
+      el.btnRestate.textContent = origText;
+    }
+  };
+}
+
+if (el.btnGrammar) {
+  el.btnGrammar.onclick = async () => {
+    if (!state.activeUserId || !state.openTextId || state.currentSentence == null) return;
+    const userId = state.activeUserId;
+    const textId = state.openTextId;
+    const sentenceIndex = state.currentSentence.sentence_index;
+    const origText = el.btnGrammar.textContent;
+    el.btnGrammar.disabled = true;
+    el.btnGrammar.textContent = "Analyzing…";
+    el.grammarPanel.classList.add("is-hidden");
+    try {
+      const data = await state.api.analyzeSentenceGrammar(userId, textId, sentenceIndex);
+      el.grammarText.textContent = data.text;
+      el.grammarPanel.classList.remove("is-hidden");
+    } catch (err) {
+      el.grammarText.textContent = `Error: ${String(err.message || err)}`;
+      el.grammarPanel.classList.remove("is-hidden");
+    } finally {
+      el.btnGrammar.disabled = false;
+      el.btnGrammar.textContent = origText;
+    }
   };
 }
 
@@ -2220,6 +2446,32 @@ el.generateMeaningForm.onsubmit = async (event) => {
 };
 
 // Keyboard controls for SRS
+document.addEventListener("keydown", async (event) => {
+  if (event.key === "A" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if (state.currentView !== "reader" || !state.activeUserId || !state.currentSentence) {
+      return;
+    }
+    const tokens = state.currentSentence.tokens;
+    const toMark = tokens.filter((t) => t.state !== "known");
+    if (toMark.length === 0) return;
+    try {
+      await Promise.all(
+        toMark.map((t) =>
+          state.api.updateWordState(state.activeUserId, t.normalized_word, "known", state.currentLanguage)
+        )
+      );
+      // Update local token states and re-render
+      for (const t of state.currentSentence.tokens) {
+        t.state = "known";
+      }
+      renderSentence();
+    } catch (_) {
+      // Silent fail — no UI disruption for a secret shortcut
+    }
+    return;
+  }
+});
+
 document.addEventListener("keydown", (event) => {
   if (state.currentView !== "srs" || !state.srsCurrentCard) {
     return;
@@ -2313,6 +2565,13 @@ el.srsMnemonicForm.onsubmit = async (event) => {
 };
 
 window.addEventListener("keydown", (event) => {
+  if (state.currentView === "reader" && event.key === "F3") {
+    event.preventDefault();
+    state.readerShowNikkud = !state.readerShowNikkud;
+    renderSentence();
+    return;
+  }
+
   if (state.currentView !== "srs") {
     return;
   }

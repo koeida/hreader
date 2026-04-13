@@ -121,6 +121,19 @@
           <button id="next-sentence" type="button" title="Go to next sentence">Next</button>
         </div>
 
+        <div class="sentence-ai-tools">
+          <button id="btn-restate" type="button" class="ai-tool-btn" title="Generate a simpler restatement of this sentence in the target language">Restate</button>
+          <button id="btn-grammar" type="button" class="ai-tool-btn" title="Show a detailed grammatical breakdown of this sentence">Grammar</button>
+        </div>
+        <div id="restate-panel" class="ai-panel is-hidden" aria-live="polite">
+          <div class="ai-panel-label">Simplified Restatement</div>
+          <p id="restate-text" class="ai-panel-text"></p>
+        </div>
+        <div id="grammar-panel" class="ai-panel is-hidden" aria-live="polite">
+          <div class="ai-panel-label">Grammar Analysis</div>
+          <p id="grammar-text" class="ai-panel-text"></p>
+        </div>
+
         <section id="word-details-panel" class="word-details-panel is-hidden" aria-live="polite">
           <div class="panel-title-row">
             <h3>Word Details</h3>
@@ -235,9 +248,15 @@
         </div>
         <div id="progress-level" class="progress-level"></div>
         <h2 class="progress-subheading">Words Read</h2>
+        <div id="words-read-summary" class="words-read-summary"></div>
         <div id="words-read-state" class="state" role="status" aria-live="polite"></div>
         <div class="progress-chart-wrap">
           <canvas id="words-read-chart"></canvas>
+        </div>
+        <h2 class="progress-subheading">SRS Deck by Stage</h2>
+        <div id="srs-history-state" class="state" role="status" aria-live="polite"></div>
+        <div class="progress-chart-wrap">
+          <canvas id="srs-history-chart"></canvas>
         </div>
       </section>
     </main>
