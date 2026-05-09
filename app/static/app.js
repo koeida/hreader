@@ -248,6 +248,7 @@ const state = {
   srsRevealed: false,
   srsDefinitions: [],
   srsMnemonic: null,
+  srsMnemonicEditing: false,
   srsLoadingDetailsForWord: "",
   srsDailyNewRemaining: 0,
   srsAvailableNewCount: 0,
@@ -846,6 +847,7 @@ function clearSrsState() {
   state.srsRevealed = false;
   state.srsDefinitions = [];
   state.srsMnemonic = null;
+  state.srsMnemonicEditing = false;
   state.srsLoadingDetailsForWord = "";
   state.srsDailyNewRemaining = 0;
   state.srsAvailableNewCount = 0;
@@ -891,13 +893,42 @@ function renderSrsDefinitions() {
 
 function renderSrsMnemonic() {
   const hasMnemonic = Boolean((state.srsMnemonic || "").trim());
-  if (hasMnemonic) {
-    el.srsMnemonicView.textContent = state.srsMnemonic;
+  const displayText = hasMnemonic ? state.srsMnemonic : "No mnemonic yet";
+
+  el.srsMnemonicView.textContent = displayText;
+  el.srsMnemonicView.classList.toggle("is-empty", !hasMnemonic);
+  el.srsMnemonicView.setAttribute("role", "button");
+  el.srsMnemonicView.setAttribute("tabindex", state.srsMnemonicEditing ? "-1" : "0");
+  el.srsMnemonicView.setAttribute("aria-label", hasMnemonic ? "Edit mnemonic" : "Add mnemonic");
+  el.srsMnemonicView.title = hasMnemonic ? "Click to edit mnemonic" : "Click to add mnemonic";
+
+  if (!state.srsMnemonicEditing) {
+    el.srsMnemonicView.classList.remove("is-hidden");
     el.srsMnemonicForm.classList.add("is-hidden");
     return;
   }
-  el.srsMnemonicView.textContent = "No mnemonic yet";
+
+  el.srsMnemonicView.classList.add("is-hidden");
   el.srsMnemonicForm.classList.remove("is-hidden");
+  el.srsMnemonicInput.value = state.srsMnemonic || "";
+  requestAnimationFrame(() => {
+    el.srsMnemonicInput.focus();
+    el.srsMnemonicInput.select();
+  });
+}
+
+function startSrsMnemonicEdit() {
+  if (!state.srsCurrentCard || !state.srsRevealed) {
+    return;
+  }
+  state.srsMnemonicEditing = true;
+  renderSrsMnemonic();
+}
+
+function cancelSrsMnemonicEdit() {
+  state.srsMnemonicEditing = false;
+  el.srsMnemonicInput.value = "";
+  renderSrsMnemonic();
 }
 
 function renderSrs() {
@@ -946,6 +977,7 @@ function applySrsSessionData(cards, data) {
   state.srsRevealed = false;
   state.srsDefinitions = [];
   state.srsMnemonic = null;
+  state.srsMnemonicEditing = false;
   state.srsDailyNewRemaining = data.daily_new_remaining || 0;
   state.srsAvailableNewCount = data.available_new_count || 0;
   state.srsDailyResetAt = data.daily_reset_at || "";
@@ -1042,6 +1074,7 @@ async function submitSrsResult(result) {
     state.srsRevealed = false;
     state.srsDefinitions = [];
     state.srsMnemonic = null;
+    state.srsMnemonicEditing = false;
     state.srsCardFlipped = false;
     setStateMessage(el.srsState, "");
     renderSrs();
@@ -1076,6 +1109,7 @@ async function undoSrsReview() {
     state.srsRevealed = true;
     state.srsDefinitions = undoEntry.definitions;
     state.srsMnemonic = undoEntry.mnemonic;
+    state.srsMnemonicEditing = false;
     state.srsCardFlipped = true;
 
     setStateMessage(el.srsState, "Undo successful");
@@ -2476,6 +2510,10 @@ document.addEventListener("keydown", (event) => {
   if (state.currentView !== "srs" || !state.srsCurrentCard) {
     return;
   }
+  const activeTag = document.activeElement?.tagName?.toLowerCase() || "";
+  if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") {
+    return;
+  }
 
   // Space: flip card
   if (event.code === "Space" && !state.srsRevealed) {
@@ -2503,6 +2541,27 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     void undoSrsReview();
     return;
+  }
+});
+
+el.srsMnemonicView.addEventListener("click", startSrsMnemonicEdit);
+
+el.srsMnemonicView.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    startSrsMnemonicEdit();
+  }
+});
+
+el.srsMnemonicInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    el.srsMnemonicForm.requestSubmit();
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    cancelSrsMnemonicEdit();
   }
 });
 
@@ -2553,14 +2612,14 @@ el.srsMnemonicForm.onsubmit = async (event) => {
       return;
     }
     state.srsMnemonic = data?.mnemonic || null;
-    el.srsMnemonicInput.value = "";
+    state.srsMnemonicEditing = false;
     setStateMessage(el.srsState, "");
     renderSrs();
   } catch (err) {
     setStateMessage(el.srsState, `Mnemonic save failed: ${String(err.message || err)}`, true);
   } finally {
     el.srsMnemonicSave.disabled = false;
-    el.srsMnemonicSave.textContent = previousText || "Save Mnemonic";
+    el.srsMnemonicSave.textContent = previousText || "Save";
   }
 };
 

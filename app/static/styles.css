@@ -1164,6 +1164,21 @@ textarea:focus-visible {
   min-height: 2.5rem;
   display: flex;
   align-items: center;
+  cursor: text;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.srs-mnemonic-view.is-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.srs-mnemonic-view:hover,
+.srs-mnemonic-view:focus-visible {
+  background: var(--surface);
+  border-left-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
 }
 
 .srs-mnemonic-form {

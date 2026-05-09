@@ -66,6 +66,8 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert "loadSrsSession" in js.text
     assert "submitSrsResult" in js.text
     assert "srsReinsertWrongCard" in js.text
+    assert "startSrsMnemonicEdit" in js.text
+    assert "el.srsMnemonicForm.requestSubmit()" in js.text
     assert "state.selectedWord !== word" in js.text
     assert "renderSentence();" in js.text
     assert "animateSelectionPulse" in js.text
