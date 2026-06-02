@@ -16,6 +16,8 @@ This command captures screenshots to:
 - `docs/visual-qa/03-reader-modal.png`
 - `docs/visual-qa/04-reader-and-words.png`
 
+Those are the canonical stored screenshots for this visual QA pass. Keep them under `docs/visual-qa/` so they stay discoverable in the repo.
+
 Any non-canonical PNG files already under `docs/visual-qa/` are removed automatically on each run.
 
 ## Quick Review Checklist

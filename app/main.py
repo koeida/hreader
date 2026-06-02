@@ -30,6 +30,7 @@ from app.models import (
     SentenceResponse,
     SentenceTokenResponse,
     SrsCardResponse,
+    SrsDeleteResponse,
     SrsReviewRequest,
     SrsReviewResponse,
     SrsSessionAddNewRequest,
@@ -53,6 +54,8 @@ from app.models import (
     WordsListResponse,
     SrsHistoryBucket,
     SrsHistoryResponse,
+    SrsPostponeRequest,
+    SrsPostponeResponse,
     WordsReadBucket,
     WordsReadHistoryResponse,
     WordsReadSummary,
@@ -130,7 +133,7 @@ def parse_progress(conn: Any, user_id: str, text_id: str, language: str = "hebre
         f"""
         SELECT normalized_word
         FROM srs_cards
-        WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders}) AND stage_index >= 4
+        WHERE user_id = ? AND language = ? AND normalized_word IN ({placeholders}) AND stage_index >= 4 AND deleted_at IS NULL
         """,
         (user_id, language, *sorted(unique_words)),
     ).fetchall()
@@ -646,6 +649,8 @@ def _sync_srs_card(conn: Any, user_id: str, normalized: str, state: str, now: st
                 stage_index = 0,
                 due_at = excluded.due_at,
                 introduced_at = NULL,
+                last_reviewed_at = NULL,
+                deleted_at = NULL,
                 updated_at = excluded.updated_at
             """,
             (user_id, language, normalized, now, now, now),
@@ -1212,7 +1217,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND language = ? AND is_introduced = 1 AND due_at < ?
+            WHERE user_id = ? AND language = ? AND is_introduced = 1 AND deleted_at IS NULL AND due_at < ?
             """,
             (user_id, language, window_end_iso),
         ).fetchall()
@@ -1228,7 +1233,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT COUNT(*) AS total
             FROM srs_cards
-            WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0
+            WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0 AND deleted_at IS NULL
             """,
             (user_id, language),
         ).fetchone()["total"]
@@ -1269,7 +1274,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 """
                 SELECT *
                 FROM srs_cards
-                WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0
+                WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0 AND deleted_at IS NULL
                 ORDER BY created_at ASC, normalized_word ASC
                 LIMIT ?
                 """,
@@ -1312,7 +1317,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT COUNT(*) AS total
             FROM srs_cards
-            WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0
+            WHERE user_id = ? AND language = ? AND is_new = 1 AND is_introduced = 0 AND deleted_at IS NULL
             """,
             (user_id, language),
         ).fetchone()["total"]
@@ -1344,7 +1349,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             """
             SELECT *
             FROM srs_cards
-            WHERE user_id = ? AND language = ? AND normalized_word = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ? AND deleted_at IS NULL
             """,
             (user_id, language, normalized),
         ).fetchone()
@@ -1392,6 +1397,46 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         ).fetchone()
         display_word = resolve_srs_display_words(conn, user_id, [normalized], language).get(normalized, normalized)
         return SrsReviewResponse(card=row_to_srs_card_with_display(updated, display_word))
+
+    @app.delete("/v1/users/{user_id}/srs/cards/{normalized_word}", response_model=SrsDeleteResponse)
+    def delete_srs_card(
+        user_id: str,
+        normalized_word: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> SrsDeleteResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        row = conn.execute(
+            """
+            SELECT normalized_word
+            FROM srs_cards
+            WHERE user_id = ? AND language = ? AND normalized_word = ? AND deleted_at IS NULL
+            """,
+            (user_id, language, normalized),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="srs_card_not_found")
+
+        deleted_at = utc_now_iso()
+        conn.execute(
+            """
+            UPDATE srs_cards
+            SET deleted_at = ?, is_new = 0, is_introduced = 0, updated_at = ?
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
+            """,
+            (deleted_at, deleted_at, user_id, language, normalized),
+        )
+        conn.commit()
+        return SrsDeleteResponse(normalized_word=normalized, deleted_at=deleted_at)
 
     @app.get("/v1/users/{user_id}/texts/{text_id}/progress", response_model=TextProgress)
     def text_progress(user_id: str, text_id: str, conn: Any = Depends(get_conn)) -> TextProgress:
@@ -1738,10 +1783,59 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         if range not in ("month", "year", "all"):
             raise HTTPException(status_code=400, detail="invalid_range")
         rows = conn.execute(
-            "SELECT stage_index, introduced_at, last_reviewed_at FROM srs_cards WHERE user_id = ? AND language = ? AND is_introduced = 1",
+            "SELECT stage_index, introduced_at, last_reviewed_at FROM srs_cards WHERE user_id = ? AND language = ? AND is_introduced = 1 AND deleted_at IS NULL",
             (user_id, language),
         ).fetchall()
         return SrsHistoryResponse(range=range, buckets=_bucket_srs_history(rows, range))
+
+    @app.post("/v1/users/{user_id}/srs/postpone", response_model=SrsPostponeResponse)
+    def postpone_srs(
+        user_id: str,
+        body: SrsPostponeRequest,
+        timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> SrsPostponeResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        now = datetime.now(UTC)
+        _, window_end_utc = srs_window_bounds(now, timezone_offset_minutes)
+        window_end_iso = to_iso_utc(window_end_utc)
+        due_rows = conn.execute(
+            """
+            SELECT normalized_word
+            FROM srs_cards
+            WHERE user_id = ? AND language = ? AND is_introduced = 1 AND deleted_at IS NULL AND due_at < ?
+            ORDER BY due_at DESC, normalized_word DESC
+            """,
+            (user_id, language, window_end_iso),
+        ).fetchall()
+        due_before = len(due_rows)
+        target_due_count = min(body.target_due_count, due_before)
+        postpone_count = due_before - target_due_count
+        words_to_postpone = [row["normalized_word"] for row in due_rows[:postpone_count]]
+
+        if words_to_postpone:
+            updated_at = utc_now_iso()
+            conn.executemany(
+                """
+                UPDATE srs_cards
+                SET due_at = ?, updated_at = ?
+                WHERE user_id = ? AND language = ? AND normalized_word = ?
+                """,
+                [(window_end_iso, updated_at, user_id, language, word) for word in words_to_postpone],
+            )
+        conn.commit()
+        return SrsPostponeResponse(
+            postponed_count=postpone_count,
+            due_before=due_before,
+            due_after=target_due_count,
+            postponed_until=window_end_utc,
+        )
 
     return app
 

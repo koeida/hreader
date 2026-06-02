@@ -102,6 +102,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             due_at TEXT NOT NULL,
             introduced_at TEXT,
             last_reviewed_at TEXT,
+            deleted_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             PRIMARY KEY (user_id, language, normalized_word),
@@ -156,6 +157,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE sentences_read ADD COLUMN nikkud_off INTEGER NOT NULL DEFAULT 0")
         conn.commit()
 
+    srs_cols = {row[1] for row in conn.execute("PRAGMA table_info(srs_cards)")}
+    if "deleted_at" not in srs_cols:
+        conn.execute("ALTER TABLE srs_cards ADD COLUMN deleted_at TEXT")
+        conn.commit()
+
 
 def _run_language_migration(conn: sqlite3.Connection) -> None:
     # Simple ALTER TABLE for tables that just need a new column
@@ -194,12 +200,13 @@ def _run_language_migration(conn: sqlite3.Connection) -> None:
             due_at TEXT NOT NULL,
             introduced_at TEXT,
             last_reviewed_at TEXT,
+            deleted_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             PRIMARY KEY (user_id, language, normalized_word),
             FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
         );
-        INSERT INTO srs_cards_new SELECT user_id, 'hebrew', normalized_word, is_new, is_introduced, stage_index, due_at, introduced_at, last_reviewed_at, created_at, updated_at FROM srs_cards;
+        INSERT INTO srs_cards_new SELECT user_id, 'hebrew', normalized_word, is_new, is_introduced, stage_index, due_at, introduced_at, last_reviewed_at, NULL, created_at, updated_at FROM srs_cards;
         DROP TABLE srs_cards;
         ALTER TABLE srs_cards_new RENAME TO srs_cards;
         CREATE INDEX IF NOT EXISTS idx_srs_cards_user_due ON srs_cards(user_id, language, due_at);

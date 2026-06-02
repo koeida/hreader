@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 3 — Inline Banner (no overlay)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+
+  /* Minimal SRS header context */
+  .srs-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid #2a2a2a;
+    font-size: 13px; color: #666;
+  }
+  .srs-header .queue-count { color: #aaa; }
+  .postpone-trigger {
+    font-size: 12px; color: #555; background: none;
+    border: 1px solid #303030; border-radius: 5px;
+    padding: 4px 10px; cursor: pointer;
+  }
+  .postpone-trigger:hover { color: #888; border-color: #444; }
+
+  /* Banner — slides in below header, no overlay */
+  .banner {
+    background: #1e2433;
+    border-bottom: 1px solid #2d3a55;
+    padding: 20px 24px;
+  }
+
+  .banner-top {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 18px;
+  }
+  .banner-top h3 { font-size: 14px; font-weight: 600; color: #c8d4f0; }
+  .banner-top p { font-size: 12px; color: #6a7899; margin-top: 2px; }
+
+  /* Readout as a pill */
+  .readout-pill {
+    margin-left: auto;
+    background: #151b2e;
+    border: 1px solid #2d3a55;
+    border-radius: 20px;
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .readout-pill .before { color: #e07070; font-weight: 700; }
+  .readout-pill .sep { color: #3a4a6a; }
+  .readout-pill .after { color: #70c98a; font-weight: 700; }
+  .readout-pill .lbl { color: #556; font-size: 11px; }
+
+  .banner-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .banner-controls label { font-size: 12px; color: #7a8aaa; white-space: nowrap; }
+  .banner-controls label strong { color: #aabbdd; }
+  input[type=range] { flex: 1; accent-color: #5b8dd9; cursor: pointer; }
+  .slider-ticks { display: flex; justify-content: space-between; font-size: 10px; color: #3a4a6a; min-width: 200px; }
+
+  .btn-cancel { padding: 7px 14px; border-radius: 7px; background: none; border: 1px solid #2d3a55; color: #7a8aaa; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .btn-confirm { padding: 7px 16px; border-radius: 7px; background: #3a5a99; border: none; color: #c8d4f0; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+  .slider-wrap { flex: 1; }
+  .slider-wrap input { width: 100%; }
+
+  /* SRS view below banner */
+  .srs-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    opacity: 0.5;
+    user-select: none;
+  }
+  .flip-card-mock {
+    width: 340px; height: 200px;
+    background: #2a2a2a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 42px; border: 1px solid #333;
+  }
+  .srs-controls-mock { display: flex; gap: 16px; }
+  .btn-mock { padding: 10px 28px; border-radius: 8px; background: #333; border: 1px solid #444; color: #888; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="srs-header">
+  <span class="queue-count">47 cards due</span>
+  <button class="postpone-trigger">Postpone…</button>
+</div>
+
+<!-- Inline banner — no overlay, content visible behind -->
+<div class="banner">
+  <div class="banner-top">
+    <div>
+      <h3>Postpone Reviews</h3>
+      <p>Shift due cards forward. Cards keep their relative spacing.</p>
+    </div>
+    <div class="readout-pill">
+      <span class="before">47</span>
+      <span class="sep">→</span>
+      <span class="after">12</span>
+      <span class="lbl">due today</span>
+    </div>
+  </div>
+
+  <div class="banner-controls">
+    <label>Shift by <strong>5 days</strong></label>
+    <div class="slider-wrap">
+      <input type="range" min="1" max="30" value="5">
+    </div>
+    <button class="btn-cancel">Cancel</button>
+    <button class="btn-confirm">Postpone 35 cards</button>
+  </div>
+</div>
+
+<div class="srs-view">
+  <div class="flip-card-mock">שָׁלוֹם</div>
+  <div class="srs-controls-mock">
+    <div class="btn-mock">Wrong</div>
+    <div class="btn-mock">Right</div>
+  </div>
+</div>
+
+</body>
+</html>

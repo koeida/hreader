@@ -179,6 +179,12 @@ class ApiClient {
     });
   }
 
+  deleteSrsCard(userId, normalizedWord, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/srs/cards/${encodeURIComponent(normalizedWord)}?language=${encodeURIComponent(language)}`, {
+      method: "DELETE",
+    });
+  }
+
   getBackupStatus() {
     return this.request("/v1/backup/status", { method: "GET" });
   }
@@ -198,7 +204,43 @@ class ApiClient {
   getWordsReadSummary(userId, language = "hebrew") {
     return this.request(`/v1/users/${userId}/progress/words-read-summary?language=${encodeURIComponent(language)}`, { method: "GET" });
   }
+
+  postponeSrs(userId, targetDueCount, tzOffsetMinutes = 0, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/srs/postpone?language=${encodeURIComponent(language)}&timezone_offset_minutes=${tzOffsetMinutes}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_due_count: targetDueCount }),
+    });
+  }
 }
+
+const READER_RASHI_PRESENTATION_LAYER = {
+  id: "rashi",
+  label: "Rashi, no nikkud",
+  sentenceClass: "reader-layer-rashi",
+  showNikkud: false,
+};
+
+const READER_HANDWRITTEN_PRESENTATION_LAYER = {
+  id: "handwritten",
+  label: "Handwritten/cursive, no nikkud",
+  sentenceClass: "reader-layer-handwritten",
+  showNikkud: false,
+};
+
+const READER_BLOCK_NO_NIKKUD_PRESENTATION_LAYER = {
+  id: "block-no-nikkud",
+  label: "Block, no nikkud",
+  sentenceClass: "reader-layer-block",
+  showNikkud: false,
+};
+
+const READER_BLOCK_NIKKUD_PRESENTATION_LAYER = {
+  id: "block-nikkud",
+  label: "Block, nikkud",
+  sentenceClass: "reader-layer-block",
+  showNikkud: true,
+};
 
 // Percentage of words that are unique (not just variants with prefixes)
 // Calculated from corpus: 714 unique base words / 881 total = 81.04%
@@ -242,7 +284,8 @@ const state = {
   currentLanguage: localStorage.getItem("current_language") || "hebrew",
   isLoggedIn: !!localStorage.getItem("active_user_id"),
   selectedTextId: null,
-  readerShowNikkud: false,
+  readerPresentationLayerIndex: 0,
+  readerInitialPresentation: localStorage.getItem("reader_initial_presentation") || "rashi",
   srsDueQueue: [],
   srsCurrentCard: null,
   srsRevealed: false,
@@ -255,6 +298,7 @@ const state = {
   srsDailyResetAt: "",
   srsUndoHistory: [], // Stack of {card, result, definitions, mnemonic}
   srsCardFlipped: false,
+  postponeDueDates: [], // ISO strings of due_at for all currently-due cards
   progressRange: "month",
   progressShowUnique: true,
   progressChart: null,
@@ -344,6 +388,7 @@ const el = {
   srsState: document.getElementById("srs-state"),
   srsReviewer: document.getElementById("srs-reviewer"),
   srsFrontWord: document.getElementById("srs-front-word"),
+  srsDeleteCard: document.getElementById("srs-delete-card"),
   srsReveal: document.getElementById("srs-reveal"),
   srsDefinitions: document.getElementById("srs-definitions"),
   srsMnemonicView: document.getElementById("srs-mnemonic-view"),
@@ -369,6 +414,14 @@ const el = {
   wordsReadSummary: document.getElementById("words-read-summary"),
   srsHistoryChartCanvas: document.getElementById("srs-history-chart"),
   srsHistoryState: document.getElementById("srs-history-state"),
+  srsPostponeBtn: document.getElementById("srs-postpone-btn"),
+  postponeOverlay: document.getElementById("postpone-overlay"),
+  postponeSlider: document.getElementById("postpone-slider"),
+  postponeDaysLabel: document.getElementById("postpone-days-label"),
+  postponeCountBefore: document.getElementById("postpone-count-before"),
+  postponeCountAfter: document.getElementById("postpone-count-after"),
+  postponeCancel: document.getElementById("postpone-cancel"),
+  postponeConfirm: document.getElementById("postpone-confirm"),
   progressRangeBtns: [
     document.getElementById("progress-range-month"),
     document.getElementById("progress-range-year"),
@@ -679,6 +732,7 @@ async function selectTextForReading(textId) {
   state.selectedTextId = textId;
   const pos = await state.api.getTextPosition(state.activeUserId, textId);
   state.sentenceIndex = pos.sentence_index ?? 0;
+  resetReaderPresentationLayer();
   switchView("reader");
   await loadSentence();
 }
@@ -999,6 +1053,7 @@ async function loadSrsSession() {
       return;
     }
     applySrsSessionData(data.due_cards, data);
+    state.postponeDueDates = (data.due_cards || []).map(c => c.due_at);
     setStateMessage(el.srsState, "");
     renderSrs();
   } catch (err) {
@@ -1086,6 +1141,45 @@ async function submitSrsResult(result) {
   }
 }
 
+async function deleteCurrentSrsCard() {
+  const card = state.srsCurrentCard;
+  if (!state.activeUserId || !card) {
+    return;
+  }
+  const requestVersion = nextRequestVersion("srsReview");
+  const previousText = el.srsDeleteCard?.textContent || "Delete";
+  try {
+    if (el.srsDeleteCard) {
+      el.srsDeleteCard.disabled = true;
+      el.srsDeleteCard.textContent = "Deleting...";
+    }
+    await state.api.deleteSrsCard(state.activeUserId, card.normalized_word, state.currentLanguage);
+    if (!isCurrentRequest("srsReview", requestVersion)) {
+      return;
+    }
+    state.srsCurrentCard = state.srsDueQueue.shift() || null;
+    state.srsRevealed = false;
+    state.srsDefinitions = [];
+    state.srsMnemonic = null;
+    state.srsMnemonicEditing = false;
+    state.srsCardFlipped = false;
+    state.srsUndoHistory = [];
+    state.postponeDueDates = [state.srsCurrentCard, ...state.srsDueQueue].filter(Boolean).map(c => c.due_at);
+    setStateMessage(el.srsState, "Card deleted");
+    renderSrs();
+  } catch (err) {
+    if (!isCurrentRequest("srsReview", requestVersion)) {
+      return;
+    }
+    setStateMessage(el.srsState, `Delete failed: ${String(err.message || err)}`, true);
+  } finally {
+    if (el.srsDeleteCard) {
+      el.srsDeleteCard.disabled = false;
+      el.srsDeleteCard.textContent = previousText;
+    }
+  }
+}
+
 async function undoSrsReview() {
   if (state.srsUndoHistory.length === 0) {
     return;
@@ -1127,6 +1221,82 @@ async function undoSrsReview() {
     }
     setStateMessage(el.srsState, `Undo failed: ${String(err.message || err)}`, true);
   }
+}
+
+// ── Postpone dialog ────────────────────────────────────────────────────────
+
+function defaultPostponeTarget(total) {
+  return Math.min(40, total);
+}
+
+function updatePostponePreview() {
+  const total = state.postponeDueDates.length;
+  const target = Math.min(parseInt(el.postponeSlider.value, 10) || 0, total);
+  const moving = total - target;
+  el.postponeCountBefore.textContent = String(total);
+  el.postponeCountAfter.textContent = String(target);
+  el.postponeDaysLabel.textContent = String(target);
+  el.postponeConfirm.textContent = moving === 1 ? "Move 1 card to tomorrow" : "Move " + moving + " cards to tomorrow";
+  el.postponeConfirm.disabled = moving <= 0;
+}
+
+function openPostponeDialog() {
+  const total = state.postponeDueDates.length;
+  const target = defaultPostponeTarget(total);
+  el.postponeSlider.min = "0";
+  el.postponeSlider.max = String(total);
+  el.postponeSlider.value = String(target);
+  updatePostponePreview();
+  el.postponeOverlay.classList.remove("is-hidden");
+}
+
+function closePostponeDialog() {
+  el.postponeOverlay.classList.add("is-hidden");
+}
+
+async function confirmPostpone() {
+  const targetDueCount = Math.min(parseInt(el.postponeSlider.value, 10) || 0, state.postponeDueDates.length);
+  const prev = el.postponeConfirm.textContent;
+  el.postponeConfirm.textContent = "Moving...";
+  el.postponeConfirm.disabled = true;
+  try {
+    await state.api.postponeSrs(state.activeUserId, targetDueCount, timezoneOffsetMinutes(), state.currentLanguage);
+    closePostponeDialog();
+    void loadSrsSession();
+  } catch (err) {
+    el.postponeConfirm.textContent = prev;
+    el.postponeConfirm.disabled = false;
+    setStateMessage(el.srsState, "Postpone failed: " + String(err.message || err), true);
+  }
+}
+
+
+if (el.srsDeleteCard) {
+  el.srsDeleteCard.addEventListener("click", () => void deleteCurrentSrsCard());
+}
+
+if (el.srsPostponeBtn) {
+  el.srsPostponeBtn.addEventListener("click", () => {
+    if (state.isLoggedIn) openPostponeDialog();
+  });
+}
+
+if (el.postponeCancel) {
+  el.postponeCancel.addEventListener("click", closePostponeDialog);
+}
+
+if (el.postponeOverlay) {
+  el.postponeOverlay.addEventListener("click", (e) => {
+    if (e.target === el.postponeOverlay) closePostponeDialog();
+  });
+}
+
+if (el.postponeConfirm) {
+  el.postponeConfirm.addEventListener("click", () => void confirmPostpone());
+}
+
+if (el.postponeSlider) {
+  el.postponeSlider.addEventListener("input", updatePostponePreview);
 }
 
 async function loadProgressData() {
@@ -1287,6 +1457,7 @@ function renderTexts() {
       }
       state.maxSentenceIndex = null;
       state.currentSentence = null;
+      resetReaderPresentationLayer();
       clearWordDetailsPanel();
       setActiveView("reader");
       await loadSentence();
@@ -1485,6 +1656,61 @@ function clearSentenceAiPanels() {
   el.grammarText.textContent = "";
 }
 
+function currentReaderPresentationLayer() {
+  const layers = readerPresentationLayersForCurrentPage();
+  return layers[state.readerPresentationLayerIndex] || layers[0];
+}
+
+function readerShowsNikkud() {
+  return currentReaderPresentationLayer().showNikkud;
+}
+
+function resetReaderPresentationLayer() {
+  state.readerPresentationLayerIndex = 0;
+}
+
+function cycleReaderPresentationLayer() {
+  state.readerPresentationLayerIndex = (state.readerPresentationLayerIndex + 1) % readerPresentationLayersForCurrentPage().length;
+}
+
+function toggleReaderInitialPresentation() {
+  state.readerInitialPresentation = state.readerInitialPresentation === "rashi" ? "handwritten" : "rashi";
+  localStorage.setItem("reader_initial_presentation", state.readerInitialPresentation);
+  state.readerPresentationLayerIndex = 0;
+}
+
+function readerPresentationLayersForCurrentPage() {
+  const firstLayer = state.readerInitialPresentation === "handwritten"
+    ? READER_HANDWRITTEN_PRESENTATION_LAYER
+    : READER_RASHI_PRESENTATION_LAYER;
+  return [
+    firstLayer,
+    READER_BLOCK_NO_NIKKUD_PRESENTATION_LAYER,
+    READER_BLOCK_NIKKUD_PRESENTATION_LAYER,
+  ];
+}
+
+function readerDisplayText(value) {
+  return readerShowsNikkud() ? value : value.replace(NIKKUD_RE, "");
+}
+
+function updateReaderPresentationClass() {
+  const layer = currentReaderPresentationLayer();
+  el.readerSentence.classList.remove(
+    "reader-layer-handwritten",
+    "reader-layer-rashi",
+    "reader-layer-block"
+  );
+  el.readerSentence.classList.add(layer.sentenceClass);
+}
+
+function markCurrentSentenceNikkudOffIfNeeded() {
+  if (readerShowsNikkud() || !state.currentSentence || !state.activeUserId || !state.openTextId) {
+    return;
+  }
+  void state.api.markSentenceNikkudOff(state.activeUserId, state.openTextId, state.currentSentence.sentence_index);
+}
+
 function renderSentence(data = state.currentSentence) {
   if (!data) {
     el.readerSentence.textContent = "";
@@ -1493,7 +1719,9 @@ function renderSentence(data = state.currentSentence) {
 
   clearSentenceAiPanels();
   state.currentSentence = data;
-  el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index} | Nikkud: ${state.readerShowNikkud ? "on (F3)" : "off (F3)"}`;
+  updateReaderPresentationClass();
+  const layer = currentReaderPresentationLayer();
+  el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index} | Layer: ${layer.label} (F3 cycle, F4 Rashi/handwriting)`;
   el.prevSentence.disabled = data.prev_sentence_index === null;
   el.nextSentence.disabled = data.next_sentence_index === null;
   el.prevSentence.dataset.target = data.prev_sentence_index;
@@ -1528,14 +1756,14 @@ function renderSentence(data = state.currentSentence) {
       const normalized = normalizeTokenForLookup(part);
       const tokenState = normalized ? wordStateByNormalized.get(normalized) : null;
       if (!normalized || !tokenState) {
-        el.readerSentence.appendChild(document.createTextNode(part));
+        el.readerSentence.appendChild(document.createTextNode(readerDisplayText(part)));
         return;
       }
 
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `sentence-word ${tokenState}`;
-      btn.textContent = state.readerShowNikkud ? part : part.replace(NIKKUD_RE, "");
+      btn.textContent = readerDisplayText(part);
       const wordButtonId = `${normalized}:${clickableWordIndex}`;
       clickableWordIndex += 1;
       btn.dataset.wordButtonId = wordButtonId;
@@ -2298,11 +2526,9 @@ if (el.prevSentence) {
   el.prevSentence.onclick = async () => {
     if (!el.prevSentence.dataset.target) return;
     clearWordDetailsPanel();
-    if (!state.readerShowNikkud && state.currentSentence && state.activeUserId && state.openTextId) {
-      void state.api.markSentenceNikkudOff(state.activeUserId, state.openTextId, state.currentSentence.sentence_index);
-    }
+    markCurrentSentenceNikkudOffIfNeeded();
     state.sentenceIndex = Number(el.prevSentence.dataset.target);
-    state.readerShowNikkud = false;
+    resetReaderPresentationLayer();
     await loadSentence();
   };
 }
@@ -2311,11 +2537,9 @@ if (el.nextSentence) {
   el.nextSentence.onclick = async () => {
     if (!el.nextSentence.dataset.target) return;
     clearWordDetailsPanel();
-    if (!state.readerShowNikkud && state.currentSentence && state.activeUserId && state.openTextId) {
-      void state.api.markSentenceNikkudOff(state.activeUserId, state.openTextId, state.currentSentence.sentence_index);
-    }
+    markCurrentSentenceNikkudOffIfNeeded();
     state.sentenceIndex = Number(el.nextSentence.dataset.target);
-    state.readerShowNikkud = false;
+    resetReaderPresentationLayer();
     await loadSentence();
   };
 }
@@ -2626,7 +2850,13 @@ el.srsMnemonicForm.onsubmit = async (event) => {
 window.addEventListener("keydown", (event) => {
   if (state.currentView === "reader" && event.key === "F3") {
     event.preventDefault();
-    state.readerShowNikkud = !state.readerShowNikkud;
+    cycleReaderPresentationLayer();
+    renderSentence();
+    return;
+  }
+  if (state.currentView === "reader" && event.key === "F4") {
+    event.preventDefault();
+    toggleReaderInitialPresentation();
     renderSentence();
     return;
   }

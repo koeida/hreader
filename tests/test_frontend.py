@@ -55,21 +55,28 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="meanings-preview"' in html.text
     assert 'id="view-srs"' in html.text
     assert 'id="section-srs"' in html.text
-    assert 'id="srs-show"' in html.text
-    assert 'id="srs-wrong"' in html.text
-    assert 'id="srs-right"' in html.text
+    assert 'id="srs-front-word"' in html.text
+    assert 'id="srs-reveal"' in html.text
     assert 'id="srs-mnemonic-input"' in html.text
+    assert 'id="srs-delete-card"' in html.text
+    assert 'id="srs-postpone-btn"' in html.text
+    assert 'id="postpone-slider"' in html.text
 
     assert "onSentenceWordActivated" in js.text
     assert "cycleState" in js.text
     assert "clearWordDetailsPanel" in js.text
     assert "loadSrsSession" in js.text
     assert "submitSrsResult" in js.text
+    assert "deleteCurrentSrsCard" in js.text
+    assert "deleteSrsCard" in js.text
     assert "srsReinsertWrongCard" in js.text
     assert "startSrsMnemonicEdit" in js.text
     assert "el.srsMnemonicForm.requestSubmit()" in js.text
     assert "state.selectedWord !== word" in js.text
     assert "renderSentence();" in js.text
+    assert "READER_RASHI_PRESENTATION_LAYER" in js.text
+    assert "toggleReaderInitialPresentation" in js.text
+    assert 'event.key === "F4"' in js.text
     assert "animateSelectionPulse" in js.text
 
 

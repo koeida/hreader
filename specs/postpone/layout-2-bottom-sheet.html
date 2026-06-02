@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout 2 — Bottom Sheet</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  .srs-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    opacity: 0.35;
+    user-select: none;
+  }
+  .flip-card-mock {
+    width: 340px; height: 200px;
+    background: #2a2a2a; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 42px; border: 1px solid #333;
+  }
+  .srs-controls-mock { display: flex; gap: 16px; }
+  .btn-mock { padding: 10px 28px; border-radius: 8px; background: #333; border: 1px solid #444; color: #888; font-size: 14px; }
+
+  /* Dim overlay above sheet */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+  }
+
+  /* Bottom sheet */
+  .sheet {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #222;
+    border-top: 1px solid #333;
+    border-radius: 20px 20px 0 0;
+    padding: 0 32px 36px;
+    box-shadow: 0 -16px 60px rgba(0,0,0,0.5);
+  }
+
+  .drag-handle {
+    width: 40px; height: 4px;
+    background: #404040; border-radius: 2px;
+    margin: 14px auto 24px;
+  }
+
+  .sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+  .sheet-header h2 { font-size: 17px; font-weight: 600; }
+  .sheet-header p { font-size: 13px; color: #777; margin-top: 4px; }
+  .close-btn { background: #333; border: none; color: #aaa; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+
+  /* Two-column layout */
+  .sheet-body { display: flex; gap: 32px; align-items: center; }
+
+  .readout {
+    flex: 0 0 auto;
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 20px 24px;
+    text-align: center;
+    min-width: 160px;
+  }
+  .readout .num { font-size: 48px; font-weight: 700; line-height: 1; }
+  .readout .num.before { color: #e05c5c; }
+  .readout .num.after { color: #5ce07a; }
+  .readout .lbl { font-size: 11px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .readout .arrow-row { font-size: 20px; color: #444; margin: 8px 0; }
+
+  .controls { flex: 1; }
+  .controls label { font-size: 13px; color: #aaa; display: flex; justify-content: space-between; margin-bottom: 12px; }
+  .controls label strong { color: #fff; }
+  input[type=range] { width: 100%; accent-color: #5b8dd9; cursor: pointer; }
+  .slider-ticks { display: flex; justify-content: space-between; font-size: 11px; color: #555; margin-top: 4px; margin-bottom: 24px; }
+
+  .actions { display: flex; gap: 10px; }
+  .btn-cancel { flex: 1; padding: 11px; border-radius: 10px; background: none; border: 1px solid #404040; color: #aaa; font-size: 14px; cursor: pointer; }
+  .btn-confirm { flex: 2; padding: 11px; border-radius: 10px; background: #5b8dd9; border: none; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="srs-view">
+  <div class="flip-card-mock">שָׁלוֹם</div>
+  <div class="srs-controls-mock">
+    <div class="btn-mock">Wrong</div>
+    <div class="btn-mock">Right</div>
+  </div>
+</div>
+
+<div class="overlay"></div>
+
+<div class="sheet">
+  <div class="drag-handle"></div>
+
+  <div class="sheet-header">
+    <div>
+      <h2>Postpone Reviews</h2>
+      <p>Push due cards forward. Cards keep their relative dates.</p>
+    </div>
+    <button class="close-btn">✕</button>
+  </div>
+
+  <div class="sheet-body">
+    <div class="readout">
+      <div class="num before">47</div>
+      <div class="lbl">due today</div>
+      <div class="arrow-row">↓</div>
+      <div class="num after">12</div>
+      <div class="lbl">due today</div>
+    </div>
+
+    <div class="controls">
+      <label>
+        Shift by
+        <strong>5 days</strong>
+      </label>
+      <input type="range" min="1" max="30" value="5">
+      <div class="slider-ticks"><span>1</span><span>10</span><span>20</span><span>30</span></div>
+
+      <div class="actions">
+        <button class="btn-cancel">Cancel</button>
+        <button class="btn-confirm">Postpone 35 cards →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -518,6 +518,110 @@ def test_srs_add_new_selects_oldest_new_cards(tmp_path: Path) -> None:
         assert added_words == {"gamma", "beta"}
 
 
+def test_srs_postpone_moves_excess_due_cards_to_tomorrow(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        words = ["alpha", "beta", "gamma", "delta", "epsilon"]
+        for word in words:
+            up = client.put(f"/v1/users/{user_id}/words/{word}", json={"state": "unknown"})
+            assert up.status_code == 200
+
+        add = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 5, "timezone_offset_minutes": 240},
+        )
+        assert add.status_code == 200
+
+        db_path = Path(client.app.state.db_path)
+        conn = get_connection(db_path)
+        try:
+            due_times = {
+                "alpha": "2026-05-20T00:00:00Z",
+                "beta": "2026-05-21T00:00:00Z",
+                "gamma": "2026-05-22T00:00:00Z",
+                "delta": "2026-05-23T00:00:00Z",
+                "epsilon": "2026-05-24T00:00:00Z",
+            }
+            for word, due_at in due_times.items():
+                conn.execute(
+                    "UPDATE srs_cards SET due_at = ? WHERE user_id = ? AND normalized_word = ?",
+                    (due_at, user_id, word),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        postpone = client.post(
+            f"/v1/users/{user_id}/srs/postpone?timezone_offset_minutes=240",
+            json={"target_due_count": 2},
+        )
+        assert postpone.status_code == 200
+        payload = postpone.json()
+        assert payload["due_before"] == 5
+        assert payload["postponed_count"] == 3
+        assert payload["due_after"] == 2
+
+        session = client.get(f"/v1/users/{user_id}/srs/session?timezone_offset_minutes=240")
+        assert session.status_code == 200
+        assert len(session.json()["due_cards"]) == 2
+
+        conn = get_connection(db_path)
+        try:
+            moved = conn.execute(
+                "SELECT normalized_word FROM srs_cards WHERE user_id = ? AND due_at = ? ORDER BY normalized_word",
+                (user_id, payload["postponed_until"].replace("+00:00", "Z")),
+            ).fetchall()
+        finally:
+            conn.close()
+        assert [row["normalized_word"] for row in moved] == ["delta", "epsilon", "gamma"]
+
+def test_srs_delete_card_excludes_it_from_reviews_counts_and_backfill(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        create_unknown = client.put(f"/v1/users/{user_id}/words/river", json={"state": "unknown"})
+        assert create_unknown.status_code == 200
+
+        before = client.get(f"/v1/users/{user_id}/srs/session")
+        assert before.status_code == 200
+        assert before.json()["available_new_count"] == 1
+
+        delete_new = client.delete(f"/v1/users/{user_id}/srs/cards/river")
+        assert delete_new.status_code == 200
+        assert delete_new.json()["normalized_word"] == "river"
+        assert delete_new.json()["deleted_at"] is not None
+
+        after = client.get(f"/v1/users/{user_id}/srs/session")
+        assert after.status_code == 200
+        assert after.json()["available_new_count"] == 0
+        assert after.json()["due_cards"] == []
+
+        review_deleted = client.post(
+            f"/v1/users/{user_id}/srs/review",
+            json={"normalized_word": "river", "result": "right"},
+        )
+        assert review_deleted.status_code == 404
+
+        db_path = Path(client.app.state.db_path)
+        conn = get_connection(db_path)
+        try:
+            row = conn.execute(
+                "SELECT deleted_at, is_new, is_introduced FROM srs_cards WHERE user_id = ? AND normalized_word = 'river'",
+                (user_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row["deleted_at"] is not None
+        assert row["is_new"] == 0
+        assert row["is_introduced"] == 0
+
+        mark_known = client.put(f"/v1/users/{user_id}/words/river", json={"state": "known"})
+        assert mark_known.status_code == 200
+        reactivate = client.put(f"/v1/users/{user_id}/words/river", json={"state": "unknown"})
+        assert reactivate.status_code == 200
+        reactivated = client.get(f"/v1/users/{user_id}/srs/session")
+        assert reactivated.status_code == 200
+        assert reactivated.json()["available_new_count"] == 1
+
 def test_srs_review_right_progression_plateau_and_wrong_reset(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         user_id = create_user(client)

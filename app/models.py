@@ -189,6 +189,11 @@ class SrsReviewResponse(BaseModel):
     card: SrsCardResponse
 
 
+class SrsDeleteResponse(BaseModel):
+    normalized_word: str
+    deleted_at: datetime
+
+
 class HealthResponse(BaseModel):
     status: str
 
@@ -260,3 +265,14 @@ class SrsHistoryResponse(BaseModel):
 
 class SentenceAnalysisResponse(BaseModel):
     text: str
+
+
+class SrsPostponeRequest(BaseModel):
+    target_due_count: int = Field(ge=0)
+
+
+class SrsPostponeResponse(BaseModel):
+    postponed_count: int
+    due_before: int
+    due_after: int
+    postponed_until: datetime

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+Hebrew:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+Hebrew:wght@400;500;700&family=Noto+Rashi+Hebrew:wght@400;500;700&family=Playpen+Sans+Hebrew:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/styles.css" />
@@ -170,7 +170,7 @@
       </section>
 
       <!-- SRS Section -->
-      <section id="section-srs" class="view-section srs-section">
+      <section id="section-srs" class="view-section srs-section" style="position:relative;">
         <div class="srs-header">
           <h2>SRS Review</h2>
           <span id="srs-meta" class="srs-progress-meta">No session loaded</span>
@@ -179,6 +179,7 @@
 
         <div id="srs-reviewer" class="srs-reviewer is-hidden">
           <div class="srs-card-container">
+            <button id="srs-delete-card" class="srs-delete-card" type="button" title="Delete this SRS card">Delete</button>
             <!-- Flip card -->
             <div class="srs-card-flip">
               <div class="srs-card-inner">
@@ -228,7 +229,44 @@
             <p class="srs-empty-subtitle">You've reviewed all available cards today</p>
           </div>
         </div>
+
+        <button id="srs-postpone-btn" class="postpone-btn">Postpone…</button>
       </section>
+
+      <!-- Postpone Dialog -->
+      <div id="postpone-overlay" class="postpone-overlay is-hidden">
+        <div class="postpone-dialog">
+          <h2>Postpone Reviews</h2>
+          <p>Keep a manageable number due today. The excess cards move to tomorrow.</p>
+
+          <div class="postpone-readout">
+            <div class="pr-before">
+              <div id="postpone-count-before" class="pr-num before">—</div>
+              <div class="pr-label">due today</div>
+            </div>
+            <div class="pr-arrow">→</div>
+            <div class="pr-after">
+              <div id="postpone-count-after" class="pr-num after">—</div>
+              <div class="pr-label">due today</div>
+            </div>
+          </div>
+
+          <div class="postpone-slider-row">
+            <div class="postpone-slider-label">
+              Keep <span id="postpone-days-label">40</span> due today
+            </div>
+            <input type="range" id="postpone-slider" min="0" max="40" value="40">
+            <div class="postpone-slider-ticks">
+              <span>0</span><span>20</span><span>40</span><span>all</span>
+            </div>
+          </div>
+
+          <div class="postpone-actions">
+            <button id="postpone-cancel" class="btn-cancel">Cancel</button>
+            <button id="postpone-confirm" class="btn-confirm">Postpone</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Progress Section -->
       <section id="section-progress" class="view-section">
