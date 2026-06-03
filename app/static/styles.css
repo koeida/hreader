@@ -327,10 +327,18 @@ body {
 .text-widget {
   position: relative;
   padding: 20px;
-  border-radius: 14px;
+  border-radius: 8px;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: all 200ms ease;
+  border: 1px solid var(--border-muted);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
+    var(--surface-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
   min-height: 140px;
   display: flex;
   flex-direction: column;
@@ -338,22 +346,32 @@ body {
 }
 
 .text-widget:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-card);
+  transform: translateY(-2px);
+  border-color: var(--border-emphasis);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0)),
+    var(--surface-raised);
+  box-shadow: var(--shadow-panel);
+}
+
+.text-widget:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px var(--focus-ring-soft), var(--shadow-panel);
 }
 
 .text-widget__title {
   font-size: 24px;
   font-weight: 700;
   margin: 0;
-  color: var(--text-inverse);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
 }
 
 .text-widget__stats {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
-  margin-top: 8px;
+  color: var(--text-secondary);
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-muted);
   line-height: 1.4;
 }
 
@@ -361,16 +379,21 @@ body {
   position: absolute;
   top: 10px;
   right: 10px;
-  display: none;
+  display: flex;
   gap: 6px;
   z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
 }
 
-.text-widget:hover .action-buttons {
-  display: flex;
+.text-widget:hover .action-buttons,
+.text-widget:focus-within .action-buttons {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.action-buttons button {
+.text-widget .action-buttons button {
   width: 32px;
   height: 32px;
   padding: 4px;
@@ -378,15 +401,17 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--surface-panel-strong) 88%, var(--bg-app) 12%);
+  border: 1px solid var(--border-emphasis);
   border-radius: 6px;
-  color: var(--text-inverse);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 
-.action-buttons button:hover {
-  background: rgba(0, 0, 0, 0.5);
+.text-widget .action-buttons button:hover {
+  background: var(--surface-hover);
   transform: none;
+  filter: none;
 }
 
 #library-grid.empty-state {

@@ -636,26 +636,6 @@ function handleLanguageSwitch(lang) {
   }
 }
 
-function colorForPercentage(pct) {
-  const ranges = [
-    [0, 70, [254, 226, 226], [220, 38, 38]],
-    [70, 80, [254, 243, 199], [245, 158, 11]],
-    [80, 90, [254, 249, 195], [132, 204, 22]],
-    [90, 101, [220, 252, 231], [34, 197, 94]],
-  ];
-
-  for (const [lo, hi, from, to] of ranges) {
-    if (pct >= lo && pct < hi) {
-      const t = (pct - lo) / (hi - lo);
-      const r = Math.round(from[0] + t * (to[0] - from[0]));
-      const g = Math.round(from[1] + t * (to[1] - from[1]));
-      const b = Math.round(from[2] + t * (to[2] - from[2]));
-      return `rgb(${r},${g},${b})`;
-    }
-  }
-  return `rgb(34,197,94)`;
-}
-
 async function renderLibraryGrid() {
   if (!state.activeUserId) return;
 
@@ -676,13 +656,10 @@ async function renderLibraryGrid() {
     const progress = text.progress || {};
     const knownPct = progress.known_percent ?? 0;
     const stage4Pct = progress.stage4_percent ?? 0;
-    const highestPct = Math.max(knownPct, stage4Pct);
-    const bgColor = colorForPercentage(highestPct);
     const totalWords = progress.total_words ?? (progress.known_count + progress.unknown_count + progress.never_seen_count) ?? 0;
 
     const widget = document.createElement("div");
     widget.className = "text-widget";
-    widget.style.backgroundColor = bgColor;
 
     const title = document.createElement("h3");
     title.className = "text-widget__title";
