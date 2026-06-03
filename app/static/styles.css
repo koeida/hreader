@@ -86,8 +86,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: var(--bg-header);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-app) 88%, var(--surface-panel) 12%);
+  border-bottom: 1px solid var(--border-muted);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.02);
   flex-shrink: 0;
 }
 
@@ -102,27 +103,43 @@ body {
   gap: 12px;
 }
 
-.nav-button {
-  background: var(--surface-panel-strong);
-  border: 1px solid var(--border);
-  color: var(--muted-strong);
-  padding: 8px 16px;
-  font-size: 0.82rem;
+.nav-left {
+  gap: 2px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-muted);
   border-radius: 8px;
+}
+
+.nav-button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
-  transition: all 140ms ease;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .nav-button:hover {
-  background: var(--surface-hover);
-  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  transform: none;
+  filter: none;
 }
 
 .nav-button.active {
-  background: var(--accent);
-  border-color: var(--accent-strong);
-  color: var(--accent-on);
+  background: var(--surface-panel-strong);
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+  box-shadow:
+    inset 0 2px 0 var(--accent-muted),
+    0 1px 2px rgba(0, 0, 0, 0.16);
 }
 
 .logout-link {
