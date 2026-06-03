@@ -646,7 +646,7 @@ async function renderLibraryGrid() {
   if (state.texts.length === 0) {
     grid.className = "empty-state";
     const empty = document.createElement("div");
-    empty.textContent = "No texts yet. Create one to get started.";
+    empty.textContent = "No texts yet. Add your first text with the Add Text panel.";
     grid.appendChild(empty);
     return;
   }
