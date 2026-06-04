@@ -44,9 +44,15 @@
   --semantic-warning: #e0a840;
   --semantic-warning-soft: #2a2010;
   --semantic-warning-border: #5a4010;
-  --word-known-bg: #1a3550;
-  --word-unknown-bg: #3d2a0e;
-  --word-never-seen-bg: #2a2a35;
+  --word-known-bg: rgba(92, 224, 122, 0.08);
+  --word-known-border: rgba(92, 224, 122, 0.24);
+  --word-known-mark: rgba(92, 224, 122, 0.42);
+  --word-unknown-bg: rgba(224, 168, 64, 0.09);
+  --word-unknown-border: rgba(224, 168, 64, 0.34);
+  --word-unknown-mark: rgba(224, 168, 64, 0.54);
+  --word-never-seen-bg: rgba(255, 255, 255, 0.035);
+  --word-never-seen-border: rgba(255, 255, 255, 0.11);
+  --word-never-seen-mark: rgba(255, 255, 255, 0.22);
   --overlay-scrim: rgba(0, 0, 0, 0.6);
   --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 26px rgba(0, 0, 0, 0.16);
   --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.6);
@@ -786,25 +792,30 @@ textarea:focus-visible {
 
 .sentence-word {
   border: 1px solid transparent;
-  margin: 0 0.08rem;
+  margin: 0 0.04rem;
+  background: transparent;
   color: var(--ink);
-  border-radius: 7px;
-  padding: 0.12rem 0.3rem;
-  min-height: 34px;
+  border-radius: 5px;
+  padding: 0.02rem 0.16rem 0.05rem;
+  min-height: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 180ms ease, transform 140ms ease;
+  line-height: 1.35;
+  vertical-align: baseline;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 180ms ease, color 140ms ease, transform 140ms ease;
   unicode-bidi: isolate;
 }
 
 .sentence-word:hover {
+  background: rgba(255, 255, 255, 0.045);
   transform: translateY(-1px);
 }
 
 .sentence-word.active {
   border-color: var(--accent);
-  filter: brightness(1.1);
-  box-shadow: 0 0 0 1px var(--focus-ring-accent), 0 0 0 4px var(--focus-ring-soft);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--focus-ring-accent), 0 0 0 5px var(--focus-ring-soft), inset 0 -0.14em 0 var(--accent);
 }
 
 .sentence-word.pulse {
@@ -828,19 +839,36 @@ textarea:focus-visible {
 .sentence-word:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+  box-shadow: 0 0 0 4px var(--focus-ring-soft), inset 0 -0.12em 0 var(--focus-ring);
 }
 
 .sentence-word.known {
   background: var(--word-known-bg);
+  border-color: var(--word-known-border);
+  box-shadow: inset 0 -0.09em 0 var(--word-known-mark);
 }
 
 .sentence-word.unknown {
   background: var(--word-unknown-bg);
+  border-color: var(--word-unknown-border);
+  color: color-mix(in srgb, var(--ink) 84%, var(--semantic-warning) 16%);
+  box-shadow: inset 0 -0.11em 0 var(--word-unknown-mark);
 }
 
 .sentence-word.never_seen {
   background: var(--word-never-seen-bg);
+  border-color: var(--word-never-seen-border);
+  color: var(--text-secondary);
+  box-shadow: inset 0 -0.08em 0 var(--word-never-seen-mark);
+}
+
+.sentence-word.active.known,
+.sentence-word.active.unknown,
+.sentence-word.active.never_seen {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--focus-ring-accent), 0 0 0 5px var(--focus-ring-soft), inset 0 -0.14em 0 var(--accent);
 }
 
 .sentence-ai-tools {
