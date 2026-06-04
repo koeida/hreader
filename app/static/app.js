@@ -1010,7 +1010,11 @@ function renderSrs() {
   const dueCount = state.srsDueQueue.length + (hasActiveCard ? 1 : 0);
   const available = state.srsAvailableNewCount;
   const remaining = state.srsDailyNewRemaining;
-  el.srsMeta.textContent = `Due ${dueCount} | New available ${available} | Daily remaining ${remaining}`;
+  el.srsMeta.innerHTML = `
+    <span class="srs-meta-item"><span class="srs-meta-value">${dueCount}</span><span class="srs-meta-label">Due</span></span>
+    <span class="srs-meta-item"><span class="srs-meta-value">${available}</span><span class="srs-meta-label">New available</span></span>
+    <span class="srs-meta-item"><span class="srs-meta-value">${remaining}</span><span class="srs-meta-label">Daily remaining</span></span>
+  `;
 
   const isReviewingDone = !hasActiveCard && dueCount === 0;
   const canAddNewCards = isReviewingDone && available > 0 && remaining > 0;
