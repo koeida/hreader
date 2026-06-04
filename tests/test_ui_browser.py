@@ -338,7 +338,7 @@ def test_duplicate_words_cycle_updates_all_occurrences(live_server: str) -> None
         all_unknown = page.evaluate(
             """
             () => {
-              const words = Array.from(document.querySelectorAll('.sentence-word')).filter((node) => node.textContent?.trim() === 'אָבָא');
+              const words = Array.from(document.querySelectorAll('.sentence-word')).filter((node) => node.textContent?.trim() === 'אבא');
               return words.length >= 2 && words.every((node) => node.classList.contains('unknown'));
             }
             """
@@ -392,11 +392,17 @@ def test_reader_reopens_text_at_last_persisted_sentence_after_reload(live_server
         # Click on the text card to open reader
         page.wait_for_selector(".text-widget")
         page.click(".text-widget")
-        for _ in range(31):
-            page.click("#next-sentence")
-        page.wait_for_function(
-            "() => document.getElementById('reader-meta').textContent.includes('sentence 31')"
-        )
+        for target_sentence in range(1, 32):
+            with page.expect_response(
+                lambda response: "/position" in response.url
+                and response.request.method == "PUT"
+                and response.status == 200
+            ):
+                page.click("#next-sentence")
+            page.wait_for_function(
+                "(target) => document.getElementById('reader-meta').textContent.includes(`sentence ${target}`)",
+                arg=target_sentence,
+            )
 
         # Exit reader and reload
         page.click("#reader-exit-btn")
