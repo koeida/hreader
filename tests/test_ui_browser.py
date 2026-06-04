@@ -111,6 +111,25 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str) -> N
 
         first.click()
         page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
+        layout_contract = page.evaluate(
+            """
+            () => {
+              const mnemonic = document.getElementById('mnemonic-form').getBoundingClientRect();
+              const meaning = document.getElementById('add-meaning-form').getBoundingClientRect();
+              const panel = document.getElementById('word-details-panel').getBoundingClientRect();
+              const verticalOffset = Math.abs(meaning.top - mnemonic.top);
+              const giantGutter = meaning.left - mnemonic.right;
+              const leftOffset = Math.abs(meaning.left - mnemonic.left);
+              const stackedCleanly = leftOffset <= 8 && meaning.top >= mnemonic.bottom - 8;
+              const balancedColumns = verticalOffset <= 96 && giantGutter <= panel.width * 0.12;
+              return {
+                ok: stackedCleanly || balancedColumns,
+                reason: `verticalOffset=${verticalOffset}; giantGutter=${giantGutter}; leftOffset=${leftOffset}; panelWidth=${panel.width}`,
+              };
+            }
+            """
+        )
+        assert layout_contract["ok"] is True, layout_contract["reason"]
         assert page.locator("#word-details-status").inner_text().strip() == "Unseen"
         first_selected = page.locator("#word-details-word").inner_text().strip()
 

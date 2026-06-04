@@ -950,9 +950,9 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--surface) 24%, transparent);
   padding: 0.68rem 0.76rem 0.76rem;
   box-shadow: none;
-  display: grid;
-  grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1fr);
-  gap: 0.5rem 0.72rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.58rem;
 }
 
 .word-details-panel.is-hidden {
@@ -960,7 +960,6 @@ textarea:focus-visible {
 }
 
 .word-details-panel .panel-title-row {
-  grid-column: 1 / -1;
   justify-content: flex-start;
   gap: 0.6rem;
   padding-bottom: 0.36rem;
@@ -1003,11 +1002,10 @@ textarea:focus-visible {
 .word-details-panel #meanings-state,
 .word-details-panel .meaning-preview,
 .word-details-panel #meanings-list {
-  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .word-details-panel #word-details-state {
-  grid-column: 2;
   margin-top: 0;
 }
 
@@ -1019,19 +1017,10 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--bg) 24%, transparent);
 }
 
-.word-details-panel #mnemonic-form {
-  grid-column: 1;
-  grid-row: span 2;
-}
-
-.word-details-panel #mnemonic-state {
-  grid-column: 1;
-  margin-top: 0;
-}
-
+.word-details-panel #mnemonic-form,
 .word-details-panel #add-meaning-form,
 .word-details-panel #generate-meaning-form {
-  grid-column: 2;
+  width: 100%;
 }
 
 .word-details-panel label {
@@ -1227,30 +1216,43 @@ textarea:focus-visible {
 
 .progress-range-toggle {
   display: flex;
-  gap: 6px;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
 }
 
 .range-btn {
-  background: var(--surface-strong);
-  border: 1px solid var(--border);
-  color: var(--muted-strong);
-  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  padding: 7px 13px;
   font-size: 0.82rem;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
-  transition: all 140ms ease;
+  letter-spacing: 0;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .range-btn:hover {
-  background: var(--surface-hover);
-  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  transform: none;
+  filter: none;
 }
 
 .range-btn.active {
-  background: var(--accent);
-  border-color: var(--accent-strong);
-  color: var(--accent-on);
+  background: var(--surface-panel-strong);
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+  box-shadow:
+    inset 0 2px 0 var(--accent-muted),
+    0 1px 2px rgba(0, 0, 0, 0.16);
 }
 
 .progress-level {

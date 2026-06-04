@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import time
+import json
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -48,6 +49,17 @@ def wait_for_health(base_url: str, timeout_seconds: float = 20.0) -> None:
     raise RuntimeError(f"Server did not become healthy at {base_url}: {last_error}")
 
 
+def post_json(url: str, payload: dict) -> dict:
+    request = urllib.request.Request(
+        url,
+        method="POST",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=5.0) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def main() -> int:
     output_dir = REPO_ROOT / "docs" / "visual-qa"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -78,31 +90,29 @@ def main() -> int:
                 page.goto("/", wait_until="networkidle")
                 page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[0]), full_page=True)
 
-                page.fill("#new-user-name", "QA Parent")
-                page.click("#create-user-form button[type='submit']")
-                page.wait_for_selector("#users-list li")
-
+                user_data = post_json(f"{base_url}/v1/users", {"display_name": "QA Parent"})
+                user_id = user_data["user_id"]
                 text_body = "שָׁלוֹם לָכֶם. דָּנָה קוֹרֵאת סֵפֶר. הַבַּיִת גָּדוֹל וְנוֹרָא יָפֶה."
-                page.fill("#new-text-title", "סיפור ביתי")
-                page.fill("#new-text-content", text_body)
-                page.click("#create-text-form button[type='submit']")
-                page.wait_for_selector("#texts-list li button:has-text('Open in Reader')")
+                post_json(
+                    f"{base_url}/v1/users/{user_id}/texts",
+                    {"title": "סיפור ביתי", "content": text_body, "language": "hebrew"},
+                )
+                page.evaluate("(userId) => localStorage.setItem('active_user_id', userId)", user_id)
+                page.goto("/", wait_until="networkidle")
+                page.wait_for_selector(".text-widget")
                 page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[1]), full_page=True)
 
-                page.click("#texts-list li button:has-text('Open in Reader')")
-                page.wait_for_function(
-                    "() => document.getElementById('reader-sentence').textContent.includes('שָׁלוֹם לָכֶם')"
-                )
+                page.click(".text-widget")
+                page.wait_for_selector(".sentence-word")
                 page.click(".sentence-word")
-                page.wait_for_selector("#word-modal.is-open")
-                page.select_option("#modal-word-state", "known")
-                page.wait_for_timeout(200)
+                page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
+                page.locator(".sentence-word").first.click()
+                page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unknown'")
                 page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[2]), full_page=True)
-                page.keyboard.press("Escape")
-                page.wait_for_selector("#word-modal:not(.is-open)")
 
-                page.click("#view-words")
-                page.select_option("#words-filter", "known")
+                page.click("#reader-exit-btn")
+                page.wait_for_selector("#app-header:not(.is-hidden)")
+                page.click("#nav-progress")
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(output_dir / CANONICAL_SCREENSHOT_NAMES[3]), full_page=True)
 
