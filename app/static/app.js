@@ -660,6 +660,9 @@ async function renderLibraryGrid() {
 
     const widget = document.createElement("div");
     widget.className = "text-widget";
+    widget.tabIndex = 0;
+    widget.setAttribute("role", "button");
+    widget.setAttribute("aria-label", `Open ${text.title}`);
 
     const title = document.createElement("h3");
     title.className = "text-widget__title";
@@ -699,6 +702,11 @@ async function renderLibraryGrid() {
     widget.appendChild(stats);
 
     widget.onclick = () => selectTextForReading(text.text_id);
+    widget.onkeydown = (e) => {
+      if (e.target !== widget || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      void selectTextForReading(text.text_id);
+    };
 
     grid.appendChild(widget);
   }
