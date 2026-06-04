@@ -645,8 +645,43 @@ async function renderLibraryGrid() {
 
   if (state.texts.length === 0) {
     grid.className = "empty-state";
-    const empty = document.createElement("div");
-    empty.textContent = "No texts yet. Add your first text with the Add Text panel.";
+    const empty = document.createElement("section");
+    empty.className = "library-empty-card";
+    empty.setAttribute("aria-labelledby", "library-empty-title");
+
+    const kicker = document.createElement("div");
+    kicker.className = "library-empty-kicker";
+    kicker.textContent = "Library is empty";
+
+    const title = document.createElement("h3");
+    title.id = "library-empty-title";
+    title.textContent = "Add your first reading text";
+
+    const copy = document.createElement("p");
+    copy.textContent = "Paste a Hebrew passage into Add Text, then open it here to start reading and tracking word progress.";
+
+    const steps = document.createElement("div");
+    steps.className = "library-empty-steps";
+    for (const stepText of ["Enter a title", "Paste the text", "Choose Add Text"]) {
+      const step = document.createElement("span");
+      step.textContent = stepText;
+      steps.appendChild(step);
+    }
+
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "library-empty-action";
+    action.textContent = "Add Text";
+    action.onclick = () => {
+      el.createTextForm?.scrollIntoView({ block: "start", behavior: "smooth" });
+      el.newTextTitle?.focus();
+    };
+
+    empty.appendChild(kicker);
+    empty.appendChild(title);
+    empty.appendChild(copy);
+    empty.appendChild(steps);
+    empty.appendChild(action);
     grid.appendChild(empty);
     return;
   }
