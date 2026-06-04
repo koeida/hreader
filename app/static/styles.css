@@ -751,12 +751,15 @@ textarea:focus-visible {
   white-space: pre-wrap;
   font-family: "Noto Sans Hebrew", sans-serif;
   font-size: clamp(2.15rem, 2.6vw, 2.75rem);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1rem 1.18rem;
-  line-height: 2.15;
-  margin: 0.55rem 0 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 1.1rem 0 0.55rem;
+  line-height: 2.2;
+  margin: 0.3rem 0 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .sentence.reader-layer-handwritten {
@@ -783,12 +786,14 @@ textarea:focus-visible {
 
 .sentence-word {
   border: 1px solid transparent;
-  margin: 0 0.12rem;
+  margin: 0 0.08rem;
   color: var(--ink);
-  border-radius: 8px;
-  padding: 0.18rem 0.37rem;
+  border-radius: 7px;
+  padding: 0.12rem 0.3rem;
   min-height: 34px;
-  transition: transform 140ms ease, box-shadow 180ms ease;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 180ms ease, transform 140ms ease;
   unicode-bidi: isolate;
 }
 
@@ -799,7 +804,7 @@ textarea:focus-visible {
 .sentence-word.active {
   border-color: var(--accent);
   filter: brightness(1.1);
-  box-shadow: 0 0 0 1px var(--focus-ring-accent);
+  box-shadow: 0 0 0 1px var(--focus-ring-accent), 0 0 0 4px var(--focus-ring-soft);
 }
 
 .sentence-word.pulse {
@@ -821,6 +826,8 @@ textarea:focus-visible {
 }
 
 .sentence-word:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
   box-shadow: 0 0 0 3px var(--focus-ring-soft);
 }
 
