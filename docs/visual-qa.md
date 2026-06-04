@@ -13,7 +13,7 @@ This command captures screenshots to:
 
 - `docs/visual-qa/01-empty-shell.png`
 - `docs/visual-qa/02-user-and-text-library.png`
-- `docs/visual-qa/03-reader-modal.png`
+- `docs/visual-qa/03-reader-word-details.png`
 - `docs/visual-qa/04-reader-and-words.png`
 
 Those are the canonical stored screenshots for this visual QA pass. Keep them under `docs/visual-qa/` so they stay discoverable in the repo.
@@ -26,8 +26,8 @@ Any non-canonical PNG files already under `docs/visual-qa/` are removed automati
 - Creating a user updates the active user selector and users list.
 - Creating a text updates the texts list with progress data.
 - Opening a text renders Hebrew sentence content in the reader panel.
-- Clicking an inline sentence word opens the modal with state controls.
-- Escape closes the word modal and returns focus to reader flow.
+- Clicking an inline sentence word opens the compact Word Details panel with state controls.
+- The Word Details panel stays inline below the reader sentence and leaves reader words clickable.
 - Word state changes are reflected in the words panel when filtered by `known`.
 
 ## Automated Mobile Coverage
@@ -42,8 +42,8 @@ Any non-canonical PNG files already under `docs/visual-qa/` are removed automati
 Automated checks cover:
 - Top-level tab buttons remain reachable and update `aria-selected`.
 - Reader sentence layout at narrow widths does not horizontally overflow.
-- Word modal opens within viewport width and closes cleanly via Close button and backdrop without scroll jumps.
-- Escape and Close-button modal paths restore focus to the originating inline word button.
+- Word Details panel opens inline within viewport width without scroll jumps.
+- Word Details controls remain reachable while the originating inline word button stays in the reader flow.
 
 ## Desktop Browser QA Checklist
 
@@ -67,10 +67,10 @@ Optional automated pass (fills the same report format automatically):
 ```
 
 Checks:
-- Click an inline sentence word, then close via backdrop, Escape, and Close button; focus should remain logical and no off-screen jumps should occur.
+- Click an inline sentence word and verify the compact Word Details panel remains inline; focus should remain logical and no off-screen jumps should occur.
 - Reader sentence words and panels should remain readable without horizontal overflow at desktop widths.
 - Top-level view tabs remain reachable and correctly update selected state.
-- Word modal controls remain fully visible within viewport bounds.
+- Word Details controls remain fully visible within viewport bounds.
 
 After testing:
 - If all browsers pass, run:

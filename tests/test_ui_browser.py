@@ -56,7 +56,7 @@ def live_server(tmp_path: Path) -> Iterator[str]:
         thread.join(timeout=10)
 
 
-def test_reader_word_details_panel_select_cycle_and_reset(live_server: str) -> None:
+def test_reader_word_details_panel_select_cycle_and_reset(live_server: str, tmp_path: Path) -> None:
     playwright = pytest.importorskip("playwright.sync_api")
 
     with playwright.sync_playwright() as p:
@@ -111,25 +111,45 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str) -> N
 
         first.click()
         page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
+        page.fill("#word-mnemonic", "abba sounds like father")
+        page.click("#mnemonic-form button[type='submit']")
+        page.wait_for_function("() => document.getElementById('mnemonic-state').textContent.trim() === 'Saved'")
+        page.fill("#manual-meaning", "father")
+        page.click("#add-meaning-form button[type='submit']")
+        page.wait_for_function("() => document.getElementById('meanings-preview').textContent.includes('father')")
         layout_contract = page.evaluate(
             """
             () => {
               const mnemonic = document.getElementById('mnemonic-form').getBoundingClientRect();
               const meaning = document.getElementById('add-meaning-form').getBoundingClientRect();
+              const generate = document.getElementById('generate-meaning-form').getBoundingClientRect();
               const panel = document.getElementById('word-details-panel').getBoundingClientRect();
+              const latest = document.getElementById('meanings-preview').getBoundingClientRect();
+              const saved = document.getElementById('meanings-list').getBoundingClientRect();
+              const textareaWidths = Array.from(document.querySelectorAll('#word-details-panel textarea'))
+                .map((textarea) => textarea.getBoundingClientRect().width);
               const verticalOffset = Math.abs(meaning.top - mnemonic.top);
               const giantGutter = meaning.left - mnemonic.right;
               const leftOffset = Math.abs(meaning.left - mnemonic.left);
               const stackedCleanly = leftOffset <= 8 && meaning.top >= mnemonic.bottom - 8;
-              const balancedColumns = verticalOffset <= 96 && giantGutter <= panel.width * 0.12;
+              const balancedColumns = verticalOffset <= 16
+                && Math.abs(generate.top - mnemonic.top) <= 16
+                && giantGutter <= panel.width * 0.08;
+              const compact = panel.height <= 360
+                && Math.max(...textareaWidths) <= panel.width * 0.52
+                && latest.height <= 72
+                && saved.height <= 96;
               return {
-                ok: stackedCleanly || balancedColumns,
-                reason: `verticalOffset=${verticalOffset}; giantGutter=${giantGutter}; leftOffset=${leftOffset}; panelWidth=${panel.width}`,
+                ok: (stackedCleanly || balancedColumns) && compact,
+                reason: `panelHeight=${panel.height}; verticalOffset=${verticalOffset}; giantGutter=${giantGutter}; leftOffset=${leftOffset}; panelWidth=${panel.width}; textareas=${textareaWidths.join(',')}; latestHeight=${latest.height}; savedHeight=${saved.height}`,
               };
             }
             """
         )
         assert layout_contract["ok"] is True, layout_contract["reason"]
+        screenshot_path = tmp_path / "compact-word-details-panel.png"
+        page.locator("#word-details-panel").screenshot(path=str(screenshot_path))
+        assert screenshot_path.stat().st_size > 0
         assert page.locator("#word-details-status").inner_text().strip() == "Unseen"
         first_selected = page.locator("#word-details-word").inner_text().strip()
 
