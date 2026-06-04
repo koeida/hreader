@@ -214,9 +214,11 @@
 
         <div id="srs-add-new" class="srs-add-new is-hidden">
           <div class="srs-empty-state">
+            <p class="srs-empty-kicker">Review queue clear</p>
             <p class="srs-empty-title">No cards due right now</p>
-            <p class="srs-empty-subtitle">Add new cards to review</p>
+            <p class="srs-empty-subtitle">Start a short study set from your available new cards.</p>
             <form id="srs-add-new-form" class="srs-add-form">
+              <label for="srs-add-count">New cards</label>
               <input id="srs-add-count" type="number" min="1" max="20" value="10" />
               <button id="srs-add-submit" type="submit">Add New Cards</button>
             </form>
@@ -225,8 +227,10 @@
 
         <div id="srs-caught-up" class="srs-caught-up is-hidden">
           <div class="srs-empty-state">
-            <p class="srs-empty-title">All caught up!</p>
-            <p class="srs-empty-subtitle">You've reviewed all available cards today</p>
+            <p class="srs-empty-kicker">Session complete</p>
+            <p class="srs-empty-title">All caught up</p>
+            <p class="srs-empty-subtitle">You've reviewed everything available today. Return to the library to keep reading.</p>
+            <button id="srs-return-library" class="srs-empty-secondary" type="button">Return to Library</button>
           </div>
         </div>
 

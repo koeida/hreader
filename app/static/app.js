@@ -403,6 +403,7 @@ const el = {
   srsAddCount: document.getElementById("srs-add-count"),
   srsAddSubmit: document.getElementById("srs-add-submit"),
   srsCaughtUp: document.getElementById("srs-caught-up"),
+  srsReturnLibrary: document.getElementById("srs-return-library"),
   backupStatus: document.getElementById("backup-status"),
   navProgress: document.getElementById("nav-progress"),
   sectionProgress: document.getElementById("section-progress"),
@@ -2438,6 +2439,12 @@ if (el.navSrs) {
 if (el.navProgress) {
   el.navProgress.onclick = () => {
     switchView("progress");
+  };
+}
+
+if (el.srsReturnLibrary) {
+  el.srsReturnLibrary.onclick = () => {
+    switchView("library");
   };
 }
 
