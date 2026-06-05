@@ -122,33 +122,30 @@
           <span id="reader-meta" class="pill">No text open</span>
         </div>
         <p id="reader-sentence" class="sentence" lang="he" dir="rtl"></p>
-        <section id="word-details-panel" class="word-details-panel is-hidden" aria-live="polite">
-          <div class="panel-title-row">
-            <h3>Word Details</h3>
-            <span id="word-details-word" class="pill">No word selected</span>
-          </div>
-          <div class="word-details-meta">
-            <span class="inline-label">Status:</span>
-            <span id="word-details-status" class="status-label">Unseen</span>
-          </div>
+        <section id="word-details-panel" class="word-details-panel is-hidden" aria-label="Selected word details" aria-live="polite">
+          <span id="word-details-word" class="sr-only">No word selected</span>
+          <span id="word-details-status" class="sr-only">Unseen</span>
           <div id="word-details-state" class="state" role="status" aria-live="polite"></div>
 
           <div class="word-details-controls">
-            <form id="mnemonic-form" class="stack-form">
+            <form id="mnemonic-form" class="inline-edit-form">
               <label for="word-mnemonic">Mnemonic</label>
-              <textarea id="word-mnemonic" placeholder="Add a memory hook for this word"></textarea>
-              <button type="submit">Save Mnemonic</button>
+              <button id="word-mnemonic-display" class="inline-edit-display is-empty" type="button" aria-label="Add mnemonic">
+                Add a memory hook
+              </button>
+              <textarea id="word-mnemonic" class="inline-edit-input is-hidden" placeholder="Add a memory hook for this word"></textarea>
             </form>
 
-            <form id="add-meaning-form" class="stack-form">
+            <form id="add-meaning-form" class="inline-edit-form">
               <label for="manual-meaning">Meaning (editable)</label>
-              <textarea id="manual-meaning" placeholder="Add your own meaning"></textarea>
-              <button type="submit">Add Meaning</button>
+              <button id="manual-meaning-display" class="inline-edit-display is-empty" type="button" aria-label="Add meaning">
+                Add your own meaning
+              </button>
+              <textarea id="manual-meaning" class="inline-edit-input is-hidden" placeholder="Add your own meaning"></textarea>
             </form>
 
-            <form id="generate-meaning-form" class="stack-form">
-              <label for="meaning-context">Generation context</label>
-              <textarea id="meaning-context" placeholder="Optional sentence context"></textarea>
+            <form id="generate-meaning-form" class="generate-meaning-form">
+              <textarea id="meaning-context" class="is-hidden" aria-hidden="true" tabindex="-1"></textarea>
               <button type="submit">Generate English Meaning</button>
             </form>
           </div>

@@ -74,6 +74,18 @@
   display: none !important;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   margin: 0;
   font-family: "Space Grotesk", "Noto Sans Hebrew", sans-serif;
@@ -1086,60 +1098,34 @@ textarea:focus-visible {
 
 .word-details-panel {
   margin-top: 0.18rem;
-  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--word-never-seen-border) 72%, var(--border) 28%);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 24%, transparent);
-  padding: 0.5rem 0.62rem 0.58rem;
+  background:
+    linear-gradient(90deg, var(--word-never-seen-mark) 0 4px, transparent 4px),
+    color-mix(in srgb, var(--word-never-seen-bg) 66%, var(--surface) 34%);
+  padding: 0.56rem 0.66rem 0.62rem;
   box-shadow: none;
   display: grid;
-  gap: 0.34rem;
+  gap: 0.4rem;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.word-details-panel.status-unknown {
+  border-color: color-mix(in srgb, var(--word-unknown-border) 72%, var(--border) 28%);
+  background:
+    linear-gradient(90deg, var(--word-unknown-mark) 0 4px, transparent 4px),
+    color-mix(in srgb, var(--word-unknown-bg) 68%, var(--surface) 32%);
+}
+
+.word-details-panel.status-known {
+  border-color: color-mix(in srgb, var(--word-known-border) 76%, var(--border) 24%);
+  background:
+    linear-gradient(90deg, var(--word-known-mark) 0 4px, transparent 4px),
+    color-mix(in srgb, var(--word-known-bg) 70%, var(--surface) 30%);
 }
 
 .word-details-panel.is-hidden {
   display: none;
-}
-
-.word-details-panel .panel-title-row {
-  justify-content: flex-start;
-  gap: 0.6rem;
-  padding-bottom: 0.28rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
-}
-
-.word-details-panel h3 {
-  color: var(--muted-strong);
-  font-size: 0.84rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.word-details-panel .pill {
-  background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
-  border-color: color-mix(in srgb, var(--border-accent-subtle) 58%, transparent);
-  color: var(--accent-muted);
-  font-size: 0.86rem;
-  line-height: 1.25;
-  direction: rtl;
-  unicode-bidi: isolate;
-}
-
-.word-details-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin-top: 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-.status-label {
-  padding: 0.12rem 0.44rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-accent-subtle) 58%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
-  color: var(--accent-muted);
-  font-size: 0.78rem;
 }
 
 .word-details-panel #meanings-state,
@@ -1157,19 +1143,18 @@ textarea:focus-visible {
 
 .word-details-controls {
   display: grid;
-  grid-template-columns: minmax(0, 0.82fr) minmax(0, 0.9fr) minmax(0, 1.28fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
   gap: 0.5rem;
-  align-items: start;
+  align-items: end;
   width: 100%;
 }
 
-.word-details-panel .stack-form {
+.word-details-panel .inline-edit-form,
+.word-details-panel .generate-meaning-form {
   margin: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  gap: 0.28rem 0.38rem;
-  align-items: end;
+  gap: 0.28rem;
+  min-width: 0;
 }
 
 .word-details-panel label {
@@ -1178,12 +1163,41 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
+.inline-edit-display {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 70%, var(--surface) 30%);
+  color: color-mix(in srgb, var(--ink) 84%, var(--muted) 16%);
+  border-radius: 7px;
+  padding: 0.42rem 0.48rem;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+
+.inline-edit-display.is-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.inline-edit-display:hover,
+.inline-edit-display:focus-visible {
+  border-color: var(--focus-ring);
+  background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface) 62%);
+  color: var(--text-primary);
+  transform: none;
+  filter: none;
+  outline: 2px solid var(--focus-ring-soft);
+  outline-offset: 2px;
+}
+
 .word-details-panel textarea {
   min-height: 42px;
   max-height: 120px;
   resize: vertical;
-  grid-column: 1 / 2;
-  grid-row: 2;
   border-color: color-mix(in srgb, var(--border) 76%, transparent);
   background: color-mix(in srgb, var(--bg-input) 90%, var(--surface) 10%);
   padding: 0.42rem 0.48rem;
@@ -1193,9 +1207,6 @@ textarea:focus-visible {
 
 .word-details-panel button {
   justify-self: start;
-  align-self: stretch;
-  grid-column: 2;
-  grid-row: 2;
   border-color: color-mix(in srgb, var(--border-accent-subtle) 66%, transparent);
   background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface) 48%);
   color: var(--accent-muted);
@@ -1212,6 +1223,14 @@ textarea:focus-visible {
   color: var(--text-primary);
   transform: none;
   filter: none;
+}
+
+.word-details-panel .generate-meaning-form {
+  align-self: end;
+}
+
+.word-details-panel .generate-meaning-form button {
+  min-height: 42px;
 }
 
 .meaning-preview {

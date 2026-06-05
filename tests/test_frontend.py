@@ -51,8 +51,15 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="word-details-state"' in html.text
     assert 'id="mnemonic-form"' in html.text
     assert 'id="word-mnemonic"' in html.text
+    assert 'id="word-mnemonic-display"' in html.text
     assert 'id="add-meaning-form"' in html.text
+    assert 'id="manual-meaning-display"' in html.text
     assert 'id="meanings-preview"' in html.text
+    assert "Word Details" not in html.text
+    assert "Status:" not in html.text
+    assert "Generation context" not in html.text
+    assert "Save Mnemonic" not in html.text
+    assert "Add Meaning" not in html.text
     assert 'id="view-srs"' in html.text
     assert 'id="section-srs"' in html.text
     assert 'id="srs-front-word"' in html.text
@@ -65,6 +72,8 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert "onSentenceWordActivated" in js.text
     assert "cycleState" in js.text
     assert "clearWordDetailsPanel" in js.text
+    assert "saveInlineMnemonic" in js.text
+    assert "saveInlineMeaning" in js.text
     assert "loadSrsSession" in js.text
     assert "submitSrsResult" in js.text
     assert "deleteCurrentSrsCard" in js.text
@@ -125,6 +134,9 @@ def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: 
     assert css.status_code == 200
     assert ".word-details-panel" in css.text
     assert ".word-details-panel.is-hidden" in css.text
+    assert ".word-details-panel.status-unknown" in css.text
+    assert ".word-details-panel.status-known" in css.text
+    assert ".inline-edit-display" in css.text
     assert ".sentence-word.active" in css.text
     assert ".sentence-word.pulse" in css.text
     assert "@keyframes word-pulse" in css.text

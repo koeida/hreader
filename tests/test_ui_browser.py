@@ -112,11 +112,19 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str, tmp_
 
         first.click()
         page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('is-hidden')")
+        assert page.locator("#word-details-panel h3").count() == 0
+        assert page.locator("#word-details-panel >> text=Word Details").count() == 0
+        assert page.locator("#word-details-panel >> text=Status:").count() == 0
+        assert page.locator("#word-details-panel >> text=Generation context").count() == 0
+        assert page.locator("#mnemonic-form button[type='submit']").count() == 0
+        assert page.locator("#add-meaning-form button[type='submit']").count() == 0
+        page.click("#word-mnemonic-display")
         page.fill("#word-mnemonic", "abba sounds like father")
-        page.click("#mnemonic-form button[type='submit']")
+        page.locator("#word-mnemonic").press("Control+Enter")
         page.wait_for_function("() => document.getElementById('mnemonic-state').textContent.trim() === 'Saved'")
+        page.click("#manual-meaning-display")
         page.fill("#manual-meaning", "father")
-        page.click("#add-meaning-form button[type='submit']")
+        page.locator("#manual-meaning").press("Control+Enter")
         page.wait_for_function("() => document.getElementById('meanings-preview').textContent.includes('father')")
         layout_contract = page.evaluate(
             """
@@ -127,22 +135,22 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str, tmp_
               const panel = document.getElementById('word-details-panel').getBoundingClientRect();
               const latest = document.getElementById('meanings-preview').getBoundingClientRect();
               const saved = document.getElementById('meanings-list').getBoundingClientRect();
-              const textareaWidths = Array.from(document.querySelectorAll('#word-details-panel textarea'))
-                .map((textarea) => textarea.getBoundingClientRect().width);
+              const fieldWidths = Array.from(document.querySelectorAll('#word-details-panel .inline-edit-display'))
+                .map((field) => field.getBoundingClientRect().width);
               const verticalOffset = Math.abs(meaning.top - mnemonic.top);
               const giantGutter = meaning.left - mnemonic.right;
               const leftOffset = Math.abs(meaning.left - mnemonic.left);
               const stackedCleanly = leftOffset <= 8 && meaning.top >= mnemonic.bottom - 8;
               const balancedColumns = verticalOffset <= 16
-                && Math.abs(generate.top - mnemonic.top) <= 16
+                && generate.left >= meaning.right - 8
                 && giantGutter <= panel.width * 0.08;
               const compact = panel.height <= 360
-                && Math.max(...textareaWidths) <= panel.width * 0.52
+                && Math.max(...fieldWidths) <= panel.width * 0.52
                 && latest.height <= 72
                 && saved.height <= 96;
               return {
                 ok: (stackedCleanly || balancedColumns) && compact,
-                reason: `panelHeight=${panel.height}; verticalOffset=${verticalOffset}; giantGutter=${giantGutter}; leftOffset=${leftOffset}; panelWidth=${panel.width}; textareas=${textareaWidths.join(',')}; latestHeight=${latest.height}; savedHeight=${saved.height}`,
+                reason: `panelHeight=${panel.height}; verticalOffset=${verticalOffset}; giantGutter=${giantGutter}; leftOffset=${leftOffset}; panelWidth=${panel.width}; fields=${fieldWidths.join(',')}; latestHeight=${latest.height}; savedHeight=${saved.height}`,
               };
             }
             """
@@ -151,22 +159,24 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str, tmp_
         screenshot_path = tmp_path / "compact-word-details-panel.png"
         page.locator("#word-details-panel").screenshot(path=str(screenshot_path))
         assert screenshot_path.stat().st_size > 0
-        assert page.locator("#word-details-status").inner_text().strip() == "Unseen"
-        first_selected = page.locator("#word-details-word").inner_text().strip()
+        assert page.locator("#word-mnemonic-display").inner_text().strip() == "abba sounds like father"
+        assert page.locator("#manual-meaning-display").inner_text().strip() == "father"
+        assert page.evaluate("() => document.getElementById('word-details-status').textContent.trim()") == "Unseen"
+        first_selected = page.evaluate("() => document.getElementById('word-details-word').textContent.trim()")
 
         first.click()
-        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unknown'")
+        page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('status-unknown')")
         first.click()
-        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Known'")
+        page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('status-known')")
         first.click()
-        page.wait_for_function("() => document.getElementById('word-details-status').textContent.trim() === 'Unseen'")
+        page.wait_for_function("() => !document.getElementById('word-details-panel').classList.contains('status-unknown') && !document.getElementById('word-details-panel').classList.contains('status-known')")
 
         second.click()
         page.wait_for_function(
             "(word) => document.getElementById('word-details-word').textContent.trim() !== word",
             arg=first_selected,
         )
-        assert page.locator("#word-details-status").inner_text().strip() == "Unseen"
+        assert page.evaluate("() => document.getElementById('word-details-status').textContent.trim()") == "Unseen"
 
         page.click("#prev-sentence")
         page.wait_for_function("() => document.getElementById('word-details-panel').classList.contains('is-hidden')")
@@ -242,10 +252,9 @@ def test_reader_words_stay_clickable_during_generate_request(live_server: str) -
         second = page.locator(".sentence-word").nth(1)
 
         first.click()
-        page.fill("#meaning-context", "context")
         page.click("#generate-meaning-form button[type='submit']")
 
-        first_selected = page.locator("#word-details-word").inner_text().strip()
+        first_selected = page.evaluate("() => document.getElementById('word-details-word').textContent.trim()")
         second.click()
         page.wait_for_function(
             "(word) => document.getElementById('word-details-word').textContent.trim() !== word",
