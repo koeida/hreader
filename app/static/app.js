@@ -637,6 +637,18 @@ function handleLanguageSwitch(lang) {
   }
 }
 
+function libraryProgressTone(progress) {
+  const totalWords = progress.total_words || 0;
+  if (totalWords <= 0) return "empty";
+
+  const engagedPct = (progress.known_percent || 0) + (progress.stage4_percent || 0);
+  const urgentPct = ((progress.unknown_count || 0) / totalWords) * 100;
+  if (engagedPct >= 85) return "complete";
+  if (urgentPct >= 35 || engagedPct < 20) return "urgent";
+  if (engagedPct >= 55) return "steady";
+  return "learning";
+}
+
 async function renderLibraryGrid() {
   if (!state.activeUserId) return;
 
@@ -692,11 +704,16 @@ async function renderLibraryGrid() {
     const progress = text.progress || {};
     const knownPct = progress.known_percent ?? 0;
     const stage4Pct = progress.stage4_percent ?? 0;
-    const totalWords = progress.total_words ?? (progress.known_count + progress.unknown_count + progress.never_seen_count) ?? 0;
+    const totalWords = progress.total_words
+      ?? ((progress.known_count ?? 0) + (progress.unknown_count ?? 0) + (progress.never_seen_count ?? 0));
+    const engagedPct = Math.min(100, knownPct + stage4Pct);
+    const progressTone = libraryProgressTone({ ...progress, total_words: totalWords });
 
     const widget = document.createElement("div");
-    widget.className = "text-widget";
+    widget.className = `text-widget text-widget--${progressTone}`;
     widget.tabIndex = 0;
+    widget.style.setProperty("--library-progress-value", `${engagedPct}%`);
+    widget.dataset.progressTone = progressTone;
     widget.setAttribute("role", "button");
     widget.setAttribute("aria-label", `Open ${text.title}`);
 

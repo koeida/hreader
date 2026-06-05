@@ -53,6 +53,13 @@
   --word-never-seen-bg: rgba(255, 255, 255, 0.035);
   --word-never-seen-border: rgba(255, 255, 255, 0.11);
   --word-never-seen-mark: rgba(255, 255, 255, 0.22);
+  --library-progress-neutral: rgba(255, 255, 255, 0.16);
+  --library-progress-success: rgba(92, 224, 122, 0.58);
+  --library-progress-success-soft: rgba(92, 224, 122, 0.075);
+  --library-progress-warning: rgba(224, 168, 64, 0.6);
+  --library-progress-warning-soft: rgba(224, 168, 64, 0.075);
+  --library-progress-danger: rgba(224, 92, 92, 0.62);
+  --library-progress-danger-soft: rgba(224, 92, 92, 0.08);
   --overlay-scrim: rgba(0, 0, 0, 0.6);
   --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 26px rgba(0, 0, 0, 0.16);
   --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.6);
@@ -372,16 +379,22 @@ body {
 }
 
 .text-widget {
+  --library-progress-accent: var(--library-progress-neutral);
+  --library-progress-fill: rgba(255, 255, 255, 0.025);
+  --library-progress-value: 0%;
   position: relative;
   padding: 16px 18px;
   border-radius: 8px;
   cursor: pointer;
   border: 1px solid var(--border-muted);
-  border-left: 4px solid var(--border-emphasis);
-  background: color-mix(in srgb, var(--surface-panel) 72%, transparent);
+  border-left: 4px solid var(--library-progress-accent);
+  background:
+    linear-gradient(90deg, var(--library-progress-fill) 0 var(--library-progress-value), transparent var(--library-progress-value) 100%),
+    color-mix(in srgb, var(--surface-panel) 72%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.018);
   transition:
     border-color 160ms ease,
+    border-left-color 160ms ease,
     background-color 160ms ease,
     box-shadow 160ms ease;
   min-height: 84px;
@@ -394,9 +407,43 @@ body {
   align-items: center;
 }
 
+.text-widget::after {
+  content: "";
+  position: absolute;
+  right: 18px;
+  bottom: 10px;
+  left: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--library-progress-accent) 0 var(--library-progress-value), transparent var(--library-progress-value) 100%),
+    rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+.text-widget--urgent {
+  --library-progress-accent: var(--library-progress-danger);
+  --library-progress-fill: var(--library-progress-danger-soft);
+}
+
+.text-widget--learning {
+  --library-progress-accent: var(--library-progress-warning);
+  --library-progress-fill: var(--library-progress-warning-soft);
+}
+
+.text-widget--steady,
+.text-widget--complete {
+  --library-progress-accent: var(--library-progress-success);
+  --library-progress-fill: var(--library-progress-success-soft);
+}
+
+.text-widget--empty {
+  --library-progress-accent: var(--library-progress-neutral);
+}
+
 .text-widget:hover {
   border-color: var(--border-emphasis);
-  border-left-color: var(--focus-ring);
+  border-left-color: color-mix(in srgb, var(--library-progress-accent) 74%, var(--focus-ring) 26%);
   background: color-mix(in srgb, var(--surface-raised) 86%, var(--accent-soft) 14%);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
 }
