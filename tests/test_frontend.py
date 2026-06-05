@@ -99,6 +99,25 @@ def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> N
     assert "updateTextPosition" in js.text
 
 
+def test_frontend_library_sort_and_feature_hooks_exist(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        js = client.get("/static/app.js")
+        html = client.get("/")
+
+    assert js.status_code == 200
+    assert html.status_code == 200
+
+    assert 'id="library-sort-switcher"' in html.text
+    assert html.text.count("data-library-sort=") == 3
+    assert 'data-library-sort="date-added"' in html.text
+    assert 'data-library-sort="percent-read"' in html.text
+    assert 'data-library-sort="percent-known"' in html.text
+    assert "getLastReadText" in js.text
+    assert "compareLibraryTexts" in js.text
+    assert "libraryReadPercent" in js.text
+    assert "text-widget--featured" in js.text
+
+
 def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         css = client.get("/static/styles.css")

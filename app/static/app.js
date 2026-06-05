@@ -273,6 +273,7 @@ const state = {
   users: [],
   activeUserId: localStorage.getItem("active_user_id") || "",
   texts: [],
+  librarySort: "date-added",
   openTextId: "",
   sentenceIndex: 0,
   maxSentenceIndex: null,
@@ -344,6 +345,7 @@ const el = {
   usersState: document.getElementById("users-state"),
   usersList: document.getElementById("users-list"),
   refreshTexts: document.getElementById("refresh-texts"),
+  librarySortBtns: Array.from(document.querySelectorAll("[data-library-sort]")),
   createTextForm: document.getElementById("create-text-form"),
   newTextTitle: document.getElementById("new-text-title"),
   newTextContent: document.getElementById("new-text-content"),
@@ -649,12 +651,141 @@ function libraryProgressTone(progress) {
   return "learning";
 }
 
+function libraryReadPercent(text) {
+  const progress = text.progress || {};
+  const totalWords = progress.total_words || 0;
+  if (totalWords <= 0) return 0;
+  const readWords = (progress.known_count || 0) + (progress.unknown_count || 0);
+  return Math.min(100, (readWords / totalWords) * 100);
+}
+
+function libraryKnownPercent(text) {
+  return Number(text.progress?.known_percent || 0);
+}
+
+function libraryTimestamp(value) {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function compareLibraryTexts(a, b, mode = state.librarySort) {
+  if (mode === "percent-read") {
+    return libraryReadPercent(b) - libraryReadPercent(a)
+      || libraryTimestamp(b.created_at) - libraryTimestamp(a.created_at)
+      || a.title.localeCompare(b.title);
+  }
+  if (mode === "percent-known") {
+    return libraryKnownPercent(b) - libraryKnownPercent(a)
+      || libraryTimestamp(b.created_at) - libraryTimestamp(a.created_at)
+      || a.title.localeCompare(b.title);
+  }
+  return libraryTimestamp(b.created_at) - libraryTimestamp(a.created_at)
+    || a.title.localeCompare(b.title);
+}
+
+function getLastReadText(texts) {
+  return texts
+    .filter((text) => Boolean(text.last_read_at))
+    .sort((a, b) => libraryTimestamp(b.last_read_at) - libraryTimestamp(a.last_read_at))[0] || null;
+}
+
+function formatLibraryDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function updateLibrarySortSwitcher() {
+  for (const btn of el.librarySortBtns || []) {
+    const isActive = btn.dataset.librarySort === state.librarySort;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-checked", isActive ? "true" : "false");
+    btn.setAttribute("role", "radio");
+  }
+}
+
+function createLibraryTextWidget(text, { featured = false } = {}) {
+  const progress = text.progress || {};
+  const knownPct = progress.known_percent ?? 0;
+  const stage4Pct = progress.stage4_percent ?? 0;
+  const totalWords = progress.total_words
+    ?? ((progress.known_count ?? 0) + (progress.unknown_count ?? 0) + (progress.never_seen_count ?? 0));
+  const engagedPct = Math.min(100, knownPct + stage4Pct);
+  const readPct = libraryReadPercent(text);
+  const progressTone = libraryProgressTone({ ...progress, total_words: totalWords });
+
+  const widget = document.createElement("div");
+  widget.className = `text-widget text-widget--${progressTone}${featured ? " text-widget--featured" : ""}`;
+  widget.tabIndex = 0;
+  widget.style.setProperty("--library-progress-value", `${engagedPct}%`);
+  widget.dataset.progressTone = progressTone;
+  widget.dataset.textId = text.text_id;
+  widget.setAttribute("role", "button");
+  widget.setAttribute("aria-label", `Open ${text.title}`);
+
+  const title = document.createElement("h3");
+  title.className = "text-widget__title";
+  title.textContent = text.title;
+
+  const stats = document.createElement("div");
+  stats.className = "text-widget__stats";
+  const lastRead = formatLibraryDate(text.last_read_at);
+  stats.innerHTML = `
+    <div>Words: ${totalWords.toLocaleString()}</div>
+    <div>Read: ${readPct.toFixed(0)}%</div>
+    <div>Known: ${knownPct.toFixed(1)}% | Stage 4+: ${stage4Pct.toFixed(1)}%</div>
+    ${featured && lastRead ? `<div>Last read: ${lastRead}</div>` : ""}
+  `;
+
+  const actionButtons = document.createElement("div");
+  actionButtons.className = "action-buttons";
+
+  const editBtn = document.createElement("button");
+  editBtn.textContent = "✎";
+  editBtn.type = "button";
+  editBtn.title = `Rename ${text.title}`;
+  editBtn.setAttribute("aria-label", `Rename ${text.title}`);
+  editBtn.onclick = (e) => {
+    e.stopPropagation();
+    void handleEditText(text.text_id, text.title);
+  };
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.textContent = "🗑";
+  deleteBtn.type = "button";
+  deleteBtn.title = `Delete ${text.title}`;
+  deleteBtn.setAttribute("aria-label", `Delete ${text.title}`);
+  deleteBtn.onclick = (e) => {
+    e.stopPropagation();
+    void handleDeleteText(text.text_id, text.title);
+  };
+
+  actionButtons.appendChild(editBtn);
+  actionButtons.appendChild(deleteBtn);
+
+  widget.appendChild(actionButtons);
+  widget.appendChild(title);
+  widget.appendChild(stats);
+
+  widget.onclick = () => selectTextForReading(text.text_id);
+  widget.onkeydown = (e) => {
+    if (e.target !== widget || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    void selectTextForReading(text.text_id);
+  };
+
+  return widget;
+}
+
 async function renderLibraryGrid() {
   if (!state.activeUserId) return;
 
   const grid = el.libraryGrid;
   if (!grid) return;
   grid.innerHTML = "";
+  updateLibrarySortSwitcher();
 
   if (state.texts.length === 0) {
     grid.className = "empty-state";
@@ -700,69 +831,38 @@ async function renderLibraryGrid() {
   }
 
   grid.className = "";
-  for (const text of state.texts) {
-    const progress = text.progress || {};
-    const knownPct = progress.known_percent ?? 0;
-    const stage4Pct = progress.stage4_percent ?? 0;
-    const totalWords = progress.total_words
-      ?? ((progress.known_count ?? 0) + (progress.unknown_count ?? 0) + (progress.never_seen_count ?? 0));
-    const engagedPct = Math.min(100, knownPct + stage4Pct);
-    const progressTone = libraryProgressTone({ ...progress, total_words: totalWords });
+  const featuredText = getLastReadText(state.texts);
+  if (featuredText) {
+    const featured = document.createElement("section");
+    featured.className = "library-featured";
+    featured.setAttribute("aria-label", "Continue reading");
 
-    const widget = document.createElement("div");
-    widget.className = `text-widget text-widget--${progressTone}`;
-    widget.tabIndex = 0;
-    widget.style.setProperty("--library-progress-value", `${engagedPct}%`);
-    widget.dataset.progressTone = progressTone;
-    widget.setAttribute("role", "button");
-    widget.setAttribute("aria-label", `Open ${text.title}`);
+    const label = document.createElement("div");
+    label.className = "library-featured__label";
+    label.textContent = "Continue";
 
-    const title = document.createElement("h3");
-    title.className = "text-widget__title";
-    title.textContent = text.title;
-
-    const stats = document.createElement("div");
-    stats.className = "text-widget__stats";
-    stats.innerHTML = `
-      <div>Words: ${totalWords.toLocaleString()}</div>
-      <div>Known: ${knownPct.toFixed(1)}% | Stage 4+: ${stage4Pct.toFixed(1)}%</div>
-    `;
-
-    const actionButtons = document.createElement("div");
-    actionButtons.className = "action-buttons";
-
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "✎";
-    editBtn.type = "button";
-    editBtn.onclick = (e) => {
-      e.stopPropagation();
-      void handleEditText(text.text_id, text.title);
-    };
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "🗑";
-    deleteBtn.type = "button";
-    deleteBtn.onclick = (e) => {
-      e.stopPropagation();
-      void handleDeleteText(text.text_id, text.title);
-    };
-
-    actionButtons.appendChild(editBtn);
-    actionButtons.appendChild(deleteBtn);
-
-    widget.appendChild(actionButtons);
-    widget.appendChild(title);
-    widget.appendChild(stats);
-
-    widget.onclick = () => selectTextForReading(text.text_id);
-    widget.onkeydown = (e) => {
-      if (e.target !== widget || (e.key !== "Enter" && e.key !== " ")) return;
-      e.preventDefault();
-      void selectTextForReading(text.text_id);
-    };
-
-    grid.appendChild(widget);
+    featured.appendChild(label);
+    featured.appendChild(createLibraryTextWidget(featuredText, { featured: true }));
+    grid.appendChild(featured);
   }
+
+  const list = document.createElement("div");
+  list.className = "library-list";
+  const sortedTexts = [...state.texts]
+    .filter((text) => text.text_id !== featuredText?.text_id)
+    .sort((a, b) => compareLibraryTexts(a, b));
+
+  if (sortedTexts.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "library-list-empty";
+    empty.textContent = "No other texts in this library.";
+    list.appendChild(empty);
+  } else {
+    for (const text of sortedTexts) {
+      list.appendChild(createLibraryTextWidget(text));
+    }
+  }
+  grid.appendChild(list);
 }
 
 async function selectTextForReading(textId) {
@@ -2411,6 +2511,12 @@ if (el.includeDeleted) {
 }
 if (el.refreshUsers) el.refreshUsers.onclick = () => loadUsers();
 if (el.refreshTexts) el.refreshTexts.onclick = () => loadTexts();
+for (const btn of el.librarySortBtns || []) {
+  btn.onclick = () => {
+    state.librarySort = btn.dataset.librarySort || "date-added";
+    void renderLibraryGrid();
+  };
+}
 if (el.refreshWords) el.refreshWords.onclick = () => loadWords();
 if (el.wordsFilter) {
   el.wordsFilter.onchange = () => {

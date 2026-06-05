@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Iterator
@@ -250,6 +251,87 @@ def test_reader_words_stay_clickable_during_generate_request(live_server: str) -
             "(word) => document.getElementById('word-details-word').textContent.trim() !== word",
             arg=first_selected,
         )
+
+        context.close()
+        browser.close()
+
+
+def test_library_featured_last_read_and_sort_switcher(live_server: str, tmp_path: Path) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    def post_json(path: str, payload: dict) -> dict:
+        resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}{path}",
+                method="POST",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        return json.load(resp)
+
+    def put_json(path: str, payload: dict) -> dict:
+        resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}{path}",
+                method="PUT",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        return json.load(resp)
+
+    def get_json(path: str) -> dict:
+        with urllib.request.urlopen(f"{live_server}{path}") as resp:
+            return json.load(resp)
+
+    user_id = post_json("/v1/users", {"display_name": "Library Sort User"})["user_id"]
+    old_id = post_json(f"/v1/users/{user_id}/texts", {"title": "Old Read", "content": "אָבָא אִמָא.", "language": "hebrew"})["text_id"]
+    time.sleep(1.05)
+    middle_id = post_json(f"/v1/users/{user_id}/texts", {"title": "Middle Continue", "content": "יֶלֶד סֵפֶר.", "language": "hebrew"})["text_id"]
+    time.sleep(1.05)
+    post_json(f"/v1/users/{user_id}/texts", {"title": "New Unread", "content": "שָׁלוֹם בַּיִת.", "language": "hebrew"})
+
+    get_json(f"/v1/users/{user_id}/texts/{old_id}/sentences/0")
+    put_json(f"/v1/users/{user_id}/texts/{old_id}/position", {"sentence_index": 0})
+    put_json(f"/v1/users/{user_id}/words/{urllib.parse.quote('אבא')}", {"state": "known"})
+    put_json(f"/v1/users/{user_id}/words/{urllib.parse.quote('אמא')}", {"state": "unknown"})
+    time.sleep(1.05)
+    get_json(f"/v1/users/{user_id}/texts/{middle_id}/sentences/0")
+    put_json(f"/v1/users/{user_id}/texts/{middle_id}/position", {"sentence_index": 0})
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        context = browser.new_context(base_url=live_server, viewport={"width": 1440, "height": 900})
+        page = context.new_page()
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
+        page.goto("/", wait_until="networkidle")
+        page.wait_for_selector(".text-widget--featured")
+
+        assert page.locator(".text-widget--featured .text-widget__title").inner_text().strip() == "Middle Continue"
+        assert page.locator("#library-sort-switcher [data-library-sort]").count() == 3
+        assert page.locator('[data-library-sort="date-added"]').get_attribute("aria-checked") == "true"
+
+        def list_titles() -> list[str]:
+            return page.locator(".library-list .text-widget__title").all_inner_texts()
+
+        assert list_titles() == ["New Unread", "Old Read"]
+
+        page.click('[data-library-sort="percent-read"]')
+        assert page.locator('[data-library-sort="percent-read"]').get_attribute("aria-checked") == "true"
+        assert list_titles() == ["Old Read", "New Unread"]
+
+        page.click('[data-library-sort="percent-known"]')
+        assert page.locator('[data-library-sort="percent-known"]').get_attribute("aria-checked") == "true"
+        assert list_titles() == ["Old Read", "New Unread"]
+
+        screenshot_path = tmp_path / "library-featured-sort-switcher-test.png"
+        page.screenshot(path=str(screenshot_path), full_page=True)
+        assert screenshot_path.stat().st_size > 0
 
         context.close()
         browser.close()

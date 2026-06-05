@@ -835,7 +835,13 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         except ValueError:
             raise HTTPException(status_code=400, detail="invalid_language")
         rows = conn.execute(
-            "SELECT text_id, user_id, title, language, created_at, updated_at FROM texts WHERE user_id = ? AND language = ? ORDER BY created_at ASC",
+            """
+            SELECT t.text_id, t.user_id, t.title, t.language, t.created_at, t.updated_at, p.updated_at AS last_read_at
+            FROM texts t
+            LEFT JOIN user_text_positions p ON p.user_id = t.user_id AND p.text_id = t.text_id
+            WHERE t.user_id = ? AND t.language = ?
+            ORDER BY t.created_at ASC
+            """,
             (user_id, language),
         ).fetchall()
         items = [
@@ -845,6 +851,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 title=row["title"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
+                last_read_at=row["last_read_at"],
                 progress=parse_progress(conn, user_id, row["text_id"], language),
             )
             for row in rows

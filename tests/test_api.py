@@ -251,6 +251,23 @@ def test_text_progress_and_list_embedded_progress(tmp_path: Path) -> None:
         assert listed.json()["items"][0]["progress"] == after.json()
 
 
+def test_text_list_embeds_last_read_timestamp(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        unread_id = create_text(client, user_id, "Unread", "שָׁלוֹם.")
+        read_id = create_text(client, user_id, "Read", "בַּיִת.")
+
+        update = client.put(f"/v1/users/{user_id}/texts/{read_id}/position", json={"sentence_index": 0})
+        assert update.status_code == 200
+        last_read_at = update.json()["updated_at"]
+
+        listed = client.get(f"/v1/users/{user_id}/texts")
+        assert listed.status_code == 200
+        by_id = {item["text_id"]: item for item in listed.json()["items"]}
+        assert by_id[read_id]["last_read_at"] == last_read_at
+        assert by_id[unread_id]["last_read_at"] is None
+
+
 def test_meanings_generate_list_delete_and_timeout_error(tmp_path: Path) -> None:
     generator = CountingGenerator()
     with make_client(tmp_path, generator=generator) as client:

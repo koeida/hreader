@@ -64,6 +64,7 @@ class TextResponse(BaseModel):
     title: str
     created_at: datetime
     updated_at: datetime
+    last_read_at: datetime | None = None
     progress: TextProgress
 
 

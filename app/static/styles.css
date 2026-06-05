@@ -319,7 +319,7 @@ body {
   grid-template-columns: minmax(0, 1fr) 320px;
   grid-template-areas:
     "header header"
-    "state add"
+    "state state"
     "grid add";
   gap: 14px 24px;
   margin: 0;
@@ -332,6 +332,55 @@ body {
 
 #panel-library-grid > .panel-title-row {
   grid-area: header;
+}
+
+.library-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-sort-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+}
+
+.library-sort-btn {
+  min-width: 46px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.library-sort-btn:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  transform: none;
+  filter: none;
+}
+
+.library-sort-btn.active {
+  background: var(--surface-panel-strong);
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+  box-shadow:
+    inset 0 2px 0 var(--accent-muted),
+    0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.library-sort-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 #panel-library-grid #create-text-form {
@@ -373,9 +422,37 @@ body {
   grid-area: grid;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-top: 0;
   max-width: 980px;
+}
+
+.library-featured {
+  display: grid;
+  gap: 7px;
+}
+
+.library-featured__label {
+  color: var(--accent-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.library-list-empty {
+  padding: 12px 14px;
+  border: 1px dashed var(--border-muted);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
 }
 
 .text-widget {
@@ -405,6 +482,23 @@ body {
     "stats actions";
   gap: 8px 18px;
   align-items: center;
+}
+
+.text-widget--featured {
+  min-height: 74px;
+  padding-block: 13px 16px;
+  border-color: var(--border-emphasis);
+  background:
+    linear-gradient(90deg, var(--library-progress-fill) 0 var(--library-progress-value), transparent var(--library-progress-value) 100%),
+    color-mix(in srgb, var(--surface-raised) 78%, var(--accent-soft) 10%);
+}
+
+.text-widget--featured .text-widget__title {
+  font-size: 1.02rem;
+}
+
+.text-widget--featured .text-widget__stats {
+  font-size: 0.8rem;
 }
 
 .text-widget::after {

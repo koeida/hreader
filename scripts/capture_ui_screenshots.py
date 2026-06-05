@@ -60,6 +60,22 @@ def post_json(url: str, payload: dict) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def put_json(url: str, payload: dict) -> dict:
+    request = urllib.request.Request(
+        url,
+        method="PUT",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=5.0) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def get_json(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=5.0) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def main() -> int:
     output_dir = REPO_ROOT / "docs" / "visual-qa"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -93,10 +109,16 @@ def main() -> int:
                 user_data = post_json(f"{base_url}/v1/users", {"display_name": "QA Parent"})
                 user_id = user_data["user_id"]
                 text_body = "שָׁלוֹם לָכֶם. דָּנָה קוֹרֵאת סֵפֶר. הַבַּיִת גָּדוֹל וְנוֹרָא יָפֶה."
-                post_json(
+                text_data = post_json(
                     f"{base_url}/v1/users/{user_id}/texts",
                     {"title": "סיפור ביתי", "content": text_body, "language": "hebrew"},
                 )
+                post_json(
+                    f"{base_url}/v1/users/{user_id}/texts",
+                    {"title": "מילים חדשות", "content": "אָבָא אִמָא. יֶלֶד קוֹרֵא.", "language": "hebrew"},
+                )
+                get_json(f"{base_url}/v1/users/{user_id}/texts/{text_data['text_id']}/sentences/0")
+                put_json(f"{base_url}/v1/users/{user_id}/texts/{text_data['text_id']}/position", {"sentence_index": 0})
                 page.evaluate("(userId) => localStorage.setItem('active_user_id', userId)", user_id)
                 page.goto("/", wait_until="networkidle")
                 page.wait_for_selector(".text-widget")

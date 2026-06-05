@@ -91,7 +91,14 @@
         <section id="panel-library-grid" class="panel">
           <div class="panel-title-row">
             <h2>Texts</h2>
-            <button id="refresh-texts" type="button" title="Reload texts for the selected user">Refresh</button>
+            <div class="library-title-actions">
+              <div id="library-sort-switcher" class="library-sort-switcher" role="radiogroup" aria-label="Sort texts">
+                <button id="library-sort-date" type="button" class="library-sort-btn active" data-library-sort="date-added" aria-label="Sort by date added, newest first" title="Date added">Date</button>
+                <button id="library-sort-read" type="button" class="library-sort-btn" data-library-sort="percent-read" aria-label="Sort by percent read" title="Percent read">Read</button>
+                <button id="library-sort-known" type="button" class="library-sort-btn" data-library-sort="percent-known" aria-label="Sort by percent known words" title="Known words">Known</button>
+              </div>
+              <button id="refresh-texts" type="button" title="Reload texts for the selected user">Refresh</button>
+            </div>
           </div>
           <form id="create-text-form" class="stack-form">
             <input id="new-text-title" required minlength="1" maxlength="200" placeholder="Text title" />
