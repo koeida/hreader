@@ -140,7 +140,11 @@ def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: 
     assert ".sentence-word.active" in css.text
     assert ".sentence-word.pulse" in css.text
     assert "@keyframes word-pulse" in css.text
+    assert "--motion-duration-fast" in css.text
+    assert "--motion-ease-standard" in css.text
     assert "@media (prefers-reduced-motion: reduce)" in css.text
+    assert "scroll-behavior: auto !important" in css.text
+    assert ".srs-card-flip.flipped .srs-card-front" in css.text
     assert ".app.view-reader" in css.text
     assert 'width: min(1500px, calc(100vw - 6rem));' in css.text
     assert ".app.view-srs" in css.text
