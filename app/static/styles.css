@@ -968,37 +968,72 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
   line-height: 1.35;
   vertical-align: baseline;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 180ms ease, color 140ms ease, transform 140ms ease;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 180ms ease,
+    color 140ms ease,
+    transform 90ms ease;
   unicode-bidi: isolate;
 }
 
 .sentence-word:hover {
-  background: rgba(255, 255, 255, 0.045);
-  transform: translateY(-1px);
+  transform: none;
+  background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  color: var(--text-primary);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    inset 0 -0.1em 0 color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+.sentence-word:active {
+  transform: translateY(1px) scale(0.985);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 66%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+    inset 0 0.12em 0 rgba(0, 0, 0, 0.18),
+    inset 0 -0.08em 0 var(--accent);
 }
 
 .sentence-word.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--text-primary);
-  box-shadow: 0 0 0 1px var(--focus-ring-accent), 0 0 0 5px var(--focus-ring-soft), inset 0 -0.14em 0 var(--accent);
+  box-shadow:
+    0 0 0 1px var(--focus-ring-accent),
+    0 0 0 5px var(--focus-ring-soft),
+    inset 0 0.08em 0 rgba(255, 255, 255, 0.035),
+    inset 0 -0.14em 0 var(--accent);
 }
 
 .sentence-word.pulse {
-  animation: word-pulse 220ms ease-out;
+  animation: word-pulse 240ms ease-out;
 }
 
 @keyframes word-pulse {
   0% {
-    transform: scale(1);
+    box-shadow:
+      0 0 0 1px var(--focus-ring-accent),
+      0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
+      inset 0 -0.14em 0 var(--accent);
   }
 
   50% {
-    transform: scale(1.06);
+    box-shadow:
+      0 0 0 1px var(--focus-ring-accent),
+      0 0 0 7px color-mix(in srgb, var(--accent) 18%, transparent),
+      inset 0 0.08em 0 rgba(255, 255, 255, 0.04),
+      inset 0 -0.16em 0 var(--accent);
   }
 
   100% {
-    transform: scale(1);
+    box-shadow:
+      0 0 0 1px var(--focus-ring-accent),
+      0 0 0 5px var(--focus-ring-soft),
+      inset 0 0.08em 0 rgba(255, 255, 255, 0.035),
+      inset 0 -0.14em 0 var(--accent);
   }
 }
 
@@ -1034,7 +1069,30 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border-color: var(--accent);
   color: var(--text-primary);
-  box-shadow: 0 0 0 1px var(--focus-ring-accent), 0 0 0 5px var(--focus-ring-soft), inset 0 -0.14em 0 var(--accent);
+  box-shadow:
+    0 0 0 1px var(--focus-ring-accent),
+    0 0 0 5px var(--focus-ring-soft),
+    inset 0 0.08em 0 rgba(255, 255, 255, 0.035),
+    inset 0 -0.14em 0 var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sentence-word {
+    transition: background-color 80ms ease, border-color 80ms ease, box-shadow 80ms ease, color 80ms ease;
+  }
+
+  .sentence-word:active {
+    transform: none;
+  }
+
+  .sentence-word.pulse {
+    animation: none;
+    box-shadow:
+      0 0 0 1px var(--focus-ring-accent),
+      0 0 0 5px var(--focus-ring-soft),
+      inset 0 0.08em 0 rgba(255, 255, 255, 0.035),
+      inset 0 -0.14em 0 var(--accent);
+  }
 }
 
 .sentence-ai-tools {
