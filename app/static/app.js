@@ -212,6 +212,10 @@ class ApiClient {
       body: JSON.stringify({ target_due_count: targetDueCount }),
     });
   }
+
+  getDictionaryLookup(word, language = "hebrew") {
+    return this.request(`/v1/dictionary/lookup?word=${encodeURIComponent(word)}&language=${encodeURIComponent(language)}`, { method: "GET" });
+  }
 }
 
 const READER_RASHI_PRESENTATION_LAYER = {
@@ -1223,6 +1227,8 @@ async function loadSrsDetailsForCurrentCard() {
     return;
   }
   state.srsLoadingDetailsForWord = word;
+  const srsDictContainer = document.getElementById("srs-dict-results");
+  renderDictResults(srsDictContainer, null);
   try {
     const [meanings, details] = await Promise.all([
       state.api.listMeanings(state.activeUserId, word, state.currentLanguage),
@@ -1234,6 +1240,7 @@ async function loadSrsDetailsForCurrentCard() {
     state.srsDefinitions = meanings.items || [];
     state.srsMnemonic = details?.mnemonic || null;
     renderSrs();
+    void loadDictionaryForWord(word, document.getElementById("srs-dict-results"));
   } catch (err) {
     if (!isCurrentRequest("srsDetails", requestVersion)) {
       return;
@@ -2226,6 +2233,85 @@ function renderWordDetails(data) {
   setStateMessage(el.mnemonicState, "");
 }
 
+function renderDictResults(container, data) {
+  if (!container) return;
+  container.innerHTML = "";
+  if (!data) {
+    container.innerHTML = '<p class="dict-loading">Loading dictionary…</p>';
+    return;
+  }
+  const { lemmas, sefaria, wiktionary } = data;
+  if (!sefaria.length && !wiktionary.length) {
+    container.innerHTML = '<p class="dict-empty">No dictionary entries found.</p>';
+    return;
+  }
+  if (lemmas.length) {
+    const lemmaEl = document.createElement("div");
+    lemmaEl.className = "dict-lemmas";
+    lemmaEl.textContent = lemmas.slice(0, 3).join(" · ");
+    container.appendChild(lemmaEl);
+  }
+  if (sefaria.length) {
+    const section = document.createElement("div");
+    section.className = "dict-section";
+    const label = document.createElement("span");
+    label.className = "dict-source-label";
+    label.textContent = "Sefaria";
+    section.appendChild(label);
+    for (const entry of sefaria) {
+      const row = document.createElement("div");
+      row.className = "dict-entry";
+      const hw = document.createElement("span");
+      hw.className = "dict-headword";
+      hw.textContent = entry.headword;
+      const defn = document.createElement("span");
+      defn.className = "dict-definition";
+      defn.textContent = entry.definition;
+      const lex = document.createElement("span");
+      lex.className = "dict-lexicon";
+      lex.textContent = entry.lexicon;
+      row.appendChild(hw);
+      row.appendChild(defn);
+      row.appendChild(lex);
+      section.appendChild(row);
+    }
+    container.appendChild(section);
+  }
+  if (wiktionary.length) {
+    const section = document.createElement("div");
+    section.className = "dict-section";
+    const label = document.createElement("span");
+    label.className = "dict-source-label";
+    label.textContent = "Wiktionary";
+    section.appendChild(label);
+    for (const entry of wiktionary) {
+      const row = document.createElement("div");
+      row.className = "dict-entry";
+      const pos = document.createElement("span");
+      pos.className = "dict-pos";
+      pos.textContent = entry.pos;
+      const defn = document.createElement("span");
+      defn.className = "dict-definition";
+      defn.textContent = entry.definition;
+      row.appendChild(pos);
+      row.appendChild(defn);
+      section.appendChild(row);
+    }
+    container.appendChild(section);
+  }
+}
+
+async function loadDictionaryForWord(word, container) {
+  if (!container || !word) return;
+  renderDictResults(container, null);
+  try {
+    const data = await state.api.getDictionaryLookup(word, state.currentLanguage);
+    renderDictResults(container, data);
+  } catch {
+    container.innerHTML = '<p class="dict-empty">Dictionary lookup failed.</p>';
+  }
+}
+
 function renderProgressChart(data) {
   const labels = data.buckets.map(b => b.date);
   let knownData = data.buckets.map(b => b.cumulative_known);
@@ -2508,6 +2594,7 @@ function setSelectedWord(word) {
   renderSentence();
   void loadWordDetailsForWord(word);
   void loadMeaningsForWord(word);
+  void loadDictionaryForWord(word, document.getElementById("word-dict-results"));
 }
 
 async function updateMeaning(meaningId, editorNode, saveButton) {

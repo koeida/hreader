@@ -60,6 +60,7 @@ from app.models import (
     WordsReadHistoryResponse,
     WordsReadSummary,
 )
+from app.dictionary import lookup_dictionary
 from app.tokenizer import NIKKUD_RE, normalize_token, tokenize_eligible
 
 SRS_DAILY_NEW_CAP = 20
@@ -1843,6 +1844,50 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
             due_after=target_due_count,
             postponed_until=window_end_utc,
         )
+
+    @app.get("/v1/dictionary/lookup")
+    async def dictionary_lookup(
+        word: str = Query(...),
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> dict:
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        row = conn.execute(
+            "SELECT lemmas_json, sefaria_json, wiktionary_json FROM dictionary_cache WHERE language = ? AND normalized_word = ?",
+            (language, word),
+        ).fetchone()
+        if row:
+            import json
+            return {
+                "word": word,
+                "lemmas": json.loads(row["lemmas_json"]),
+                "sefaria": json.loads(row["sefaria_json"]),
+                "wiktionary": json.loads(row["wiktionary_json"]),
+                "cached": True,
+            }
+        result = await lookup_dictionary(word)
+        import json
+        now = utc_now_iso()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO dictionary_cache (language, normalized_word, lemmas_json, sefaria_json, wiktionary_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                language,
+                word,
+                json.dumps(result["lemmas"], ensure_ascii=False),
+                json.dumps(result["sefaria"], ensure_ascii=False),
+                json.dumps(result["wiktionary"], ensure_ascii=False),
+                now,
+            ),
+        )
+        conn.commit()
+        result["cached"] = False
+        return result
 
     return app
 

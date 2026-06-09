@@ -140,6 +140,16 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_sentences_read_user_date ON sentences_read(user_id, read_at);
+
+        CREATE TABLE IF NOT EXISTS dictionary_cache (
+            language TEXT NOT NULL DEFAULT 'hebrew',
+            normalized_word TEXT NOT NULL,
+            lemmas_json TEXT NOT NULL DEFAULT '[]',
+            sefaria_json TEXT NOT NULL DEFAULT '[]',
+            wiktionary_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (language, normalized_word)
+        );
         """
     )
     conn.commit()

@@ -2325,3 +2325,85 @@ textarea:focus-visible {
     display: none;
   }
 }
+
+/* ── Dictionary results ───────────────────────────────────────────── */
+.dict-results {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dict-loading,
+.dict-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.dict-lemmas {
+  font-family: var(--font-hebrew, serif);
+  font-size: 1rem;
+  color: var(--text-secondary);
+  direction: rtl;
+  text-align: right;
+  letter-spacing: 0.03em;
+}
+
+.dict-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dict-source-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding-bottom: 0.15rem;
+  border-bottom: 1px solid var(--border-subtle, color-mix(in srgb, var(--border) 50%, transparent));
+}
+
+.dict-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.15rem 0;
+}
+
+.dict-headword {
+  font-family: var(--font-hebrew, serif);
+  font-size: 0.95rem;
+  direction: rtl;
+  color: var(--text-primary);
+}
+
+.dict-pos {
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--text-muted);
+  background: var(--bg-subtle, color-mix(in srgb, var(--bg-secondary) 60%, transparent));
+  padding: 0 0.3rem;
+  border-radius: 3px;
+}
+
+.dict-definition {
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.dict-lexicon {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* In SRS card back, dict results scroll with the rest of the back content */
+.srs-card-back .dict-results {
+  font-size: 0.75rem;
+}
