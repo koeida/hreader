@@ -472,10 +472,14 @@ function isCurrentRequest(key, version) {
 
 function setStateMessage(node, text, isError = false) {
   if (!node) return;
+  const normalizedText = text || "";
   node.textContent = text || "";
   node.classList.toggle("error", Boolean(isError));
-  node.classList.toggle("loading", text === "Loading...");
-  node.classList.toggle("empty", text === "Empty");
+  node.classList.toggle("loading", normalizedText === "Loading...");
+  node.classList.toggle("saving", normalizedText === "Saving...");
+  node.classList.toggle("generating", normalizedText === "Generating...");
+  node.classList.toggle("saved", normalizedText === "Saved");
+  node.classList.toggle("empty", normalizedText === "Empty");
 }
 
 function renderListState(listNode, stateNode, options) {
@@ -2306,8 +2310,10 @@ async function saveInlineMeaning() {
     state.readerMeaningValue = nextValue;
     renderInlineEditDisplays();
     stopInlineEdit("meaning");
-    setStateMessage(el.meaningsState, "");
     await loadMeaningsForWord(actionWord);
+    if (!el.meaningsState.classList.contains("error")) {
+      setStateMessage(el.meaningsState, "Saved");
+    }
   } catch (err) {
     if (state.selectedWord !== actionWord) {
       return;
@@ -2767,8 +2773,10 @@ async function updateMeaning(meaningId, editorNode, saveButton) {
     if (state.selectedWord !== actionWord) {
       return;
     }
-    setStateMessage(el.meaningsState, "");
     await loadMeaningsForWord(actionWord);
+    if (!el.meaningsState.classList.contains("error")) {
+      setStateMessage(el.meaningsState, "Saved");
+    }
   } catch (err) {
     if (state.selectedWord !== actionWord) {
       return;
@@ -3191,9 +3199,11 @@ el.generateMeaningForm.onsubmit = async (event) => {
     if (state.selectedWord !== actionWord) {
       return;
     }
-    setStateMessage(el.meaningsState, "");
     el.meaningContext.value = "";
     await loadMeaningsForWord(actionWord);
+    if (!el.meaningsState.classList.contains("error")) {
+      setStateMessage(el.meaningsState, "Saved");
+    }
   } catch (err) {
     if (state.selectedWord !== actionWord) {
       return;

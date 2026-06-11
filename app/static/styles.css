@@ -707,7 +707,6 @@ button.streak-chip:hover {
     background-color var(--motion-duration-base) var(--motion-ease-standard),
     border-color var(--motion-duration-base) var(--motion-ease-standard),
     box-shadow var(--motion-duration-base) var(--motion-ease-standard),
-    color var(--motion-duration-base) var(--motion-ease-standard),
     opacity var(--motion-duration-base) var(--motion-ease-standard),
     transform 120ms var(--motion-ease-standard);
 }
@@ -1325,7 +1324,9 @@ textarea:focus-visible {
   gap: 0.4rem;
   transition:
     background-color var(--motion-duration-base) var(--motion-ease-standard),
-    border-color var(--motion-duration-base) var(--motion-ease-standard);
+    border-color var(--motion-duration-base) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-base) var(--motion-ease-standard);
+  animation: word-details-open var(--motion-duration-moderate) var(--motion-ease-emphasized);
 }
 
 .word-details-panel.status-unknown {
@@ -1346,10 +1347,52 @@ textarea:focus-visible {
   display: none;
 }
 
+.word-details-panel:has(.inline-edit-input:not(.is-hidden)) {
+  border-color: color-mix(in srgb, var(--focus-ring) 58%, var(--border) 42%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--focus-ring) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.word-details-panel:has(#mnemonic-state.saving),
+.word-details-panel:has(#meanings-state.saving),
+.word-details-panel:has(#meanings-state.generating),
+.word-details-panel:has(#mnemonic-state.loading),
+.word-details-panel:has(#meanings-state.loading) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.word-details-panel:has(#mnemonic-state.saved),
+.word-details-panel:has(#meanings-state.saved) {
+  border-color: color-mix(in srgb, var(--semantic-success) 46%, var(--border) 54%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--semantic-success) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.word-details-panel:has(#word-details-state.error),
+.word-details-panel:has(#mnemonic-state.error),
+.word-details-panel:has(#meanings-state.error) {
+  border-color: color-mix(in srgb, var(--semantic-danger) 52%, var(--border) 48%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--semantic-danger) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
 .word-details-panel #meanings-state,
 .word-details-panel .meaning-preview,
 .word-details-panel #meanings-list {
   width: 100%;
+}
+
+.word-details-panel #word-dict-results {
+  max-height: 56px;
+  margin-top: 0;
+  overflow-y: auto;
+  padding-right: 0.28rem;
+  scrollbar-color: color-mix(in srgb, var(--border-emphasis) 72%, transparent) transparent;
 }
 
 .word-details-panel #word-details-state,
@@ -1357,6 +1400,42 @@ textarea:focus-visible {
 .word-details-panel #meanings-state {
   min-height: 0;
   margin-top: 0;
+}
+
+.word-details-panel #word-details-state:not(:empty),
+.word-details-panel #mnemonic-state:not(:empty),
+.word-details-panel #meanings-state:not(:empty) {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  color: var(--muted-strong);
+  padding: 0.16rem 0.44rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.word-details-panel .state.saving,
+.word-details-panel .state.generating,
+.word-details-panel .state.loading {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border) 62%);
+  background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface) 46%);
+  color: var(--accent-muted);
+}
+
+.word-details-panel .state.saved {
+  border-color: color-mix(in srgb, var(--semantic-success) 42%, var(--border) 58%);
+  background: color-mix(in srgb, var(--semantic-success-soft) 70%, var(--surface) 30%);
+  color: color-mix(in srgb, var(--semantic-success) 82%, var(--ink) 18%);
+}
+
+.word-details-panel .state.error {
+  border-color: color-mix(in srgb, var(--semantic-danger) 48%, var(--border) 52%);
+  background: color-mix(in srgb, var(--semantic-danger-soft) 74%, var(--surface) 26%);
+  color: color-mix(in srgb, var(--semantic-danger) 82%, var(--ink) 18%);
 }
 
 .word-details-controls {
@@ -1385,7 +1464,9 @@ textarea:focus-visible {
   width: 100%;
   min-height: 42px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--bg-input) 70%, var(--surface) 30%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), transparent 44%),
+    color-mix(in srgb, var(--bg-input) 70%, var(--surface) 30%);
   color: color-mix(in srgb, var(--ink) 84%, var(--muted) 16%);
   border-radius: 7px;
   padding: 0.42rem 0.48rem;
@@ -1393,7 +1474,15 @@ textarea:focus-visible {
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.024),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .inline-edit-display.is-empty {
@@ -1402,14 +1491,22 @@ textarea:focus-visible {
 }
 
 .inline-edit-display:hover,
+.inline-edit-display:focus,
 .inline-edit-display:focus-visible {
   border-color: var(--focus-ring);
   background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface) 62%);
   color: var(--text-primary);
-  transform: none;
+  transform: translateY(-1px);
   filter: none;
   outline: 2px solid var(--focus-ring-soft);
   outline-offset: 2px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--focus-ring-soft) 72%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.inline-edit-display:active {
+  transform: translateY(0);
 }
 
 .word-details-panel textarea {
@@ -1421,26 +1518,68 @@ textarea:focus-visible {
   padding: 0.42rem 0.48rem;
   border-radius: 7px;
   line-height: 1.35;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.024),
+    inset 0 0 0 999px rgba(255, 255, 255, 0.006);
+}
+
+.word-details-panel textarea:focus,
+.word-details-panel textarea:focus-visible {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.032), transparent 44%),
+    color-mix(in srgb, var(--bg-input) 84%, var(--accent-soft) 16%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--focus-ring-soft) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.word-details-panel textarea[data-saving="true"] {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border) 46%);
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--bg-input) 65%);
 }
 
 .word-details-panel button {
   justify-self: start;
   border-color: color-mix(in srgb, var(--border-accent-subtle) 66%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface) 48%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 52%),
+    color-mix(in srgb, var(--accent-soft) 52%, var(--surface) 48%);
   color: var(--accent-muted);
   border-radius: 7px;
   padding: 0.3rem 0.56rem;
   font-size: 0.78rem;
-  box-shadow: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 1px 0 rgba(0, 0, 0, 0.14);
   white-space: nowrap;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .word-details-panel button:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent-soft) 74%, var(--surface) 26%);
   color: var(--text-primary);
-  transform: none;
+  transform: translateY(-1px);
   filter: none;
+}
+
+.word-details-panel button:active {
+  transform: translateY(0);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.word-details-panel button:disabled {
+  cursor: wait;
+  opacity: 0.78;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border) 58%);
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface) 30%);
+  color: color-mix(in srgb, var(--accent-muted) 82%, var(--muted) 18%);
+  transform: none;
 }
 
 .word-details-panel .generate-meaning-form {
@@ -1515,6 +1654,18 @@ textarea:focus-visible {
   align-self: center;
   padding: 0.24rem 0.48rem;
   min-height: 32px;
+}
+
+@keyframes word-details-open {
+  from {
+    opacity: 0.88;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 #meanings-list li.is-removing {
@@ -2559,12 +2710,17 @@ textarea:focus-visible {
 
   .modal-box,
   .sentence-word.pulse,
+  .word-details-panel,
   .srs-reviewer {
     animation: none;
   }
 
   button:hover,
   .sentence-word:active,
+  .inline-edit-display:hover,
+  .inline-edit-display:focus-visible,
+  .word-details-panel button:hover,
+  .word-details-panel button:active,
   #meanings-list li.is-removing,
   .srs-mnemonic-form button:active {
     transform: none;
@@ -2573,6 +2729,8 @@ textarea:focus-visible {
   .sentence-word,
   .nav-button,
   .range-btn,
+  .word-details-panel,
+  .inline-edit-display,
   input,
   textarea,
   select,
