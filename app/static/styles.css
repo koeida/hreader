@@ -41,6 +41,8 @@
   --semantic-danger-soft: rgba(224, 92, 92, 0.08);
   --semantic-danger-border: rgba(224, 92, 92, 0.45);
   --semantic-success: var(--success);
+  --semantic-success-soft: rgba(92, 224, 122, 0.08);
+  --semantic-success-border: rgba(92, 224, 122, 0.42);
   --semantic-warning: #e0a840;
   --semantic-warning-soft: #2a2010;
   --semantic-warning-border: #5a4010;
@@ -1782,6 +1784,12 @@ textarea:focus-visible {
   font-weight: 500;
 }
 
+#srs-state {
+  transition:
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    opacity var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
 .srs-meta-item {
   min-width: 7.25rem;
   display: inline-flex;
@@ -1824,6 +1832,11 @@ textarea:focus-visible {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .srs-delete-card:hover:not(:disabled) {
@@ -1882,6 +1895,10 @@ textarea:focus-visible {
   border: 1px solid var(--border);
   padding: 2.5rem 2rem;
   overflow: hidden;
+  transition:
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .srs-card-front {
@@ -2180,6 +2197,62 @@ textarea:focus-visible {
 
 .srs-add-form button:hover {
   background: var(--accent-strong);
+}
+
+.srs-section.srs-feedback-flip .srs-card-face {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border) 38%);
+  box-shadow:
+    0 0 0 3px var(--focus-ring-soft),
+    0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.srs-section.srs-feedback-right #srs-state,
+.srs-section.srs-feedback-add-new #srs-state,
+.srs-section.srs-feedback-mnemonic-save #srs-state {
+  color: var(--semantic-success);
+}
+
+.srs-section.srs-feedback-wrong #srs-state,
+.srs-section.srs-feedback-delete #srs-state {
+  color: var(--semantic-danger);
+}
+
+.srs-section.srs-feedback-undo #srs-state,
+.srs-section.srs-feedback-mnemonic-edit #srs-state {
+  color: var(--accent-muted);
+}
+
+.srs-section.srs-feedback-right .srs-card-face,
+.srs-section.srs-feedback-add-new .srs-card-face,
+.srs-section.srs-feedback-mnemonic-save .srs-mnemonic-view,
+.srs-section.srs-feedback-mnemonic-save .srs-mnemonic-input {
+  border-color: var(--semantic-success-border);
+  box-shadow:
+    0 0 0 3px var(--semantic-success-soft),
+    0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.srs-section.srs-feedback-wrong .srs-card-face,
+.srs-section.srs-feedback-delete .srs-card-face {
+  border-color: var(--semantic-danger-border);
+  box-shadow:
+    0 0 0 3px var(--semantic-danger-soft),
+    0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.srs-section.srs-feedback-delete .srs-delete-card {
+  background: var(--semantic-danger-soft);
+  border-color: var(--semantic-danger);
+  color: var(--semantic-danger);
+  box-shadow: 0 0 0 3px var(--semantic-danger-soft);
+}
+
+.srs-section.srs-feedback-undo .srs-card-face,
+.srs-section.srs-feedback-mnemonic-edit .srs-mnemonic-input {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border) 38%);
+  box-shadow:
+    0 0 0 3px var(--focus-ring-soft),
+    0 10px 26px rgba(0, 0, 0, 0.18);
 }
 
 .srs-empty-secondary {
@@ -2487,6 +2560,19 @@ textarea:focus-visible {
   .srs-card-flip:not(.flipped) .srs-card-back,
   .srs-card-flip.flipped .srs-card-front {
     display: none;
+  }
+
+  #srs-state,
+  .srs-card-face,
+  .srs-delete-card,
+  .srs-mnemonic-view,
+  .srs-mnemonic-input {
+    transition:
+      background-color var(--motion-duration-instant) var(--motion-ease-standard),
+      border-color var(--motion-duration-instant) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-instant) var(--motion-ease-standard),
+      color var(--motion-duration-instant) var(--motion-ease-standard),
+      opacity var(--motion-duration-instant) var(--motion-ease-standard);
   }
 }
 

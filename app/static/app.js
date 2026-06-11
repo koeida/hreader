@@ -317,6 +317,7 @@ const state = {
   streak: null,
   srsUndoHistory: [], // Stack of {card, result, definitions, mnemonic}
   srsCardFlipped: false,
+  srsFeedbackTimer: null,
   postponeDueDates: [], // ISO strings of due_at for all currently-due cards
   progressRange: "month",
   progressShowUnique: true,
@@ -1087,6 +1088,7 @@ function clearSrsState() {
   state.srsDailyResetAt = "";
   state.srsUndoHistory = [];
   state.srsCardFlipped = false;
+  clearSrsMicrofeedback();
   el.srsMeta.textContent = "No session loaded";
   setStateMessage(el.srsState, "");
   renderSrs();
@@ -1239,12 +1241,35 @@ function startSrsMnemonicEdit() {
   }
   state.srsMnemonicEditing = true;
   renderSrsMnemonic();
+  showSrsMicrofeedback("mnemonic-edit", 620);
 }
 
 function cancelSrsMnemonicEdit() {
   state.srsMnemonicEditing = false;
   el.srsMnemonicInput.value = "";
   renderSrsMnemonic();
+}
+
+function clearSrsMicrofeedback() {
+  if (state.srsFeedbackTimer) {
+    clearTimeout(state.srsFeedbackTimer);
+    state.srsFeedbackTimer = null;
+  }
+  if (!el.sectionSrs) return;
+  for (const className of Array.from(el.sectionSrs.classList)) {
+    if (className.startsWith("srs-feedback-")) {
+      el.sectionSrs.classList.remove(className);
+    }
+  }
+}
+
+function showSrsMicrofeedback(kind, duration = 700) {
+  if (!el.sectionSrs) return;
+  clearSrsMicrofeedback();
+  requestAnimationFrame(() => {
+    el.sectionSrs.classList.add(`srs-feedback-${kind}`);
+    state.srsFeedbackTimer = setTimeout(clearSrsMicrofeedback, duration);
+  });
 }
 
 function renderSrs() {
@@ -1369,6 +1394,7 @@ async function revealSrsCard() {
   }
   state.srsRevealed = true;
   renderSrs();
+  showSrsMicrofeedback("flip", 520);
   await loadSrsDetailsForCurrentCard();
 }
 
@@ -1400,8 +1426,9 @@ async function submitSrsResult(result) {
     state.srsMnemonic = null;
     state.srsMnemonicEditing = false;
     state.srsCardFlipped = false;
-    setStateMessage(el.srsState, "");
     renderSrs();
+    setStateMessage(el.srsState, result === "right" ? "Correct" : "Review again");
+    showSrsMicrofeedback(result, 760);
     void loadStreak();
   } catch (err) {
     if (!isCurrentRequest("srsReview", requestVersion)) {
@@ -1437,6 +1464,7 @@ async function deleteCurrentSrsCard() {
     state.postponeDueDates = [state.srsCurrentCard, ...state.srsDueQueue].filter(Boolean).map(c => c.due_at);
     setStateMessage(el.srsState, "Card deleted");
     renderSrs();
+    showSrsMicrofeedback("delete", 760);
   } catch (err) {
     if (!isCurrentRequest("srsReview", requestVersion)) {
       return;
@@ -1478,6 +1506,7 @@ async function undoSrsReview() {
 
     setStateMessage(el.srsState, "Undo successful");
     renderSrs();
+    showSrsMicrofeedback("undo", 760);
 
     // Clear the message after 2 seconds
     setTimeout(() => {
@@ -3285,8 +3314,9 @@ el.srsAddNewForm.onsubmit = async (event) => {
     setStateMessage(el.srsState, "Adding...");
     const data = await state.api.addSrsNewCards(state.activeUserId, count, timezoneOffsetMinutes(), state.currentLanguage);
     applySrsSessionData(data.added_cards, data);
-    setStateMessage(el.srsState, "");
     renderSrs();
+    setStateMessage(el.srsState, "New cards added");
+    showSrsMicrofeedback("add-new", 760);
     void loadStreak();
   } catch (err) {
     setStateMessage(el.srsState, String(err.message || err), true);
@@ -3314,8 +3344,9 @@ el.srsMnemonicForm.onsubmit = async (event) => {
     }
     state.srsMnemonic = data?.mnemonic || null;
     state.srsMnemonicEditing = false;
-    setStateMessage(el.srsState, "");
     renderSrs();
+    setStateMessage(el.srsState, "Mnemonic saved");
+    showSrsMicrofeedback("mnemonic-save", 760);
   } catch (err) {
     setStateMessage(el.srsState, `Mnemonic save failed: ${String(err.message || err)}`, true);
   } finally {

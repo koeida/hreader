@@ -640,3 +640,100 @@ def test_reader_reopens_text_at_last_persisted_sentence_after_reload(live_server
 
         context.close()
         browser.close()
+
+
+def test_srs_microfeedback_keyboard_focus_and_desktop_screenshots(live_server: str, tmp_path: Path) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    def request_json(path: str, method: str = "GET", payload: dict | None = None) -> dict:
+        data = json.dumps(payload).encode() if payload is not None else None
+        resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}{path}",
+                method=method,
+                data=data,
+                headers={"Content-Type": "application/json"} if payload is not None else {},
+            )
+        )
+        return json.load(resp)
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        user_id = request_json("/v1/users", "POST", {"display_name": "SRS Feedback User"})["user_id"]
+        for word in ["אבא", "אמא"]:
+            request_json(
+                f"/v1/users/{user_id}/words/{urllib.parse.quote(word)}",
+                "PUT",
+                {"state": "unknown", "language": "hebrew"},
+            )
+        request_json(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            "POST",
+            {"count": 2, "timezone_offset_minutes": 0, "language": "hebrew"},
+        )
+
+        context = browser.new_context(base_url=live_server, viewport={"width": 1366, "height": 900})
+        page = context.new_page()
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
+        page.goto("/", wait_until="networkidle")
+        page.click("#nav-srs")
+        page.wait_for_selector("#srs-reviewer:not(.is-hidden)")
+        page.wait_for_function("() => document.getElementById('srs-front-word').textContent.trim().length > 0")
+
+        page.locator("#section-srs").screenshot(path=str(tmp_path / "srs-unrevealed-card.png"))
+        assert (tmp_path / "srs-unrevealed-card.png").stat().st_size > 0
+
+        page.keyboard.press("Space")
+        page.wait_for_function("() => document.querySelector('.srs-card-flip').classList.contains('flipped')")
+        page.wait_for_function("() => document.getElementById('srs-reveal').getBoundingClientRect().height > 0")
+        page.locator("#section-srs").screenshot(path=str(tmp_path / "srs-revealed-card.png"))
+        assert (tmp_path / "srs-revealed-card.png").stat().st_size > 0
+        assert page.evaluate("() => document.getElementById('srs-front-word').getAttribute('dir')") == "rtl"
+
+        page.focus("#srs-delete-card")
+        assert page.evaluate("() => document.activeElement.id") == "srs-delete-card"
+        delete_focus = page.evaluate(
+            """
+            () => {
+              const style = getComputedStyle(document.getElementById('srs-delete-card'));
+              return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+            }
+            """
+        )
+        assert delete_focus["outlineStyle"] != "none"
+        assert delete_focus["outlineWidth"] != "0px"
+
+        page.keyboard.press("0")
+        page.wait_for_function("() => document.getElementById('srs-state').textContent.trim() === 'Review again'")
+        page.wait_for_selector(".srs-feedback-wrong")
+
+        page.keyboard.press("Space")
+        page.wait_for_function("() => document.querySelector('.srs-card-flip').classList.contains('flipped')")
+        page.keyboard.press("1")
+        page.wait_for_function("() => document.getElementById('srs-state').textContent.trim() === 'Correct'")
+        page.wait_for_selector(".srs-feedback-right")
+
+        page.emulate_media(reduced_motion="reduce")
+        page.keyboard.press("Space")
+        page.wait_for_function("() => document.querySelector('.srs-card-flip').classList.contains('flipped')")
+        reduced_motion = page.evaluate(
+            """
+            () => {
+              const inner = document.querySelector('.srs-card-inner');
+              const face = document.querySelector('.srs-card-face');
+              return {
+                transform: getComputedStyle(inner).transform,
+                faceTransition: getComputedStyle(face).transitionDuration,
+              };
+            }
+            """
+        )
+        assert reduced_motion["transform"] == "none"
+        assert "0.08s" in reduced_motion["faceTransition"]
+
+        context.close()
+        browser.close()
