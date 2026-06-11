@@ -12,9 +12,9 @@ make visual-qa
 This command captures screenshots to:
 
 - `docs/visual-qa/01-empty-shell.png`
-- `docs/visual-qa/02-user-and-text-library.png`
+- `docs/visual-qa/02-library-header.png`
 - `docs/visual-qa/03-reader-word-details.png`
-- `docs/visual-qa/04-reader-and-words.png`
+- `docs/visual-qa/04-progress-streak.png`
 
 Those are the canonical stored screenshots for this visual QA pass. Keep them under `docs/visual-qa/` so they stay discoverable in the repo.
 
@@ -25,9 +25,12 @@ Any non-canonical PNG files already under `docs/visual-qa/` are removed automati
 - API controls are visible and health status updates from `Unknown` to `Healthy`.
 - Creating a user updates the active user selector and users list.
 - Creating a text updates the texts list with progress data.
+- The Library header streak chip is visible, aligned with navigation, and not clipped.
 - Opening a text renders Hebrew sentence content in the reader panel.
 - Clicking an inline sentence word opens the compact Word Details panel with state controls.
 - The Word Details panel stays inline below the reader sentence and leaves reader words clickable.
+- The Reader streak chip and exit control do not overlap each other or Hebrew sentence content.
+- The Progress streak card and seven-day strip use restrained warm accents with readable dark-mode contrast.
 - Word state changes are reflected in the words panel when filtered by `known`.
 
 ## Automated Mobile Coverage

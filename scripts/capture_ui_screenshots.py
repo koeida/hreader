@@ -22,9 +22,9 @@ from app.main import create_app
 
 CANONICAL_SCREENSHOT_NAMES = (
     "01-empty-shell.png",
-    "02-user-and-text-library.png",
+    "02-library-header.png",
     "03-reader-word-details.png",
-    "04-reader-and-words.png",
+    "04-progress-streak.png",
 )
 
 
