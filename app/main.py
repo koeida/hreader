@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, time, timedelta
+import json
 from pathlib import Path
 import random
 from typing import Any
@@ -36,6 +37,8 @@ from app.models import (
     SrsSessionAddNewRequest,
     SrsSessionAddNewResponse,
     SrsSessionResponse,
+    StreakDay,
+    StreakResponse,
     TextCreateRequest,
     TextListResponse,
     TextPositionResponse,
@@ -527,6 +530,179 @@ def srs_window_bounds(now_utc: datetime, timezone_offset_minutes: int) -> tuple[
     return window_start_utc, window_end_utc
 
 
+def hreader_local_day(now_utc: datetime, timezone_offset_minutes: int) -> tuple[str, datetime, datetime]:
+    window_start_utc, window_end_utc = srs_window_bounds(now_utc, timezone_offset_minutes)
+    local_day = (window_start_utc - timedelta(minutes=timezone_offset_minutes)).date().isoformat()
+    return local_day, window_start_utc, window_end_utc
+
+
+def _merge_activity_languages(existing_json: str | None, language: str) -> str:
+    try:
+        existing = json.loads(existing_json or "[]")
+    except json.JSONDecodeError:
+        existing = []
+    languages = sorted({str(item) for item in existing if item} | {language})
+    return json.dumps(languages, separators=(",", ":"))
+
+
+def record_daily_activity(
+    conn: Any,
+    user_id: str,
+    *,
+    language: str,
+    activity_type: str,
+    count: int = 1,
+    timezone_offset_minutes: int = 0,
+    now_utc: datetime | None = None,
+) -> None:
+    if count <= 0:
+        return
+    column_by_type = {
+        "reader_sentence": "reader_sentence_count",
+        "word_state": "word_state_count",
+        "srs_review": "srs_review_count",
+        "srs_new": "srs_new_count",
+    }
+    count_column = column_by_type.get(activity_type)
+    if not count_column:
+        raise ValueError(f"unknown_activity_type:{activity_type}")
+
+    now = now_utc or datetime.now(UTC)
+    now_iso = to_iso_utc(now)
+    local_day, window_start_utc, _ = hreader_local_day(now, timezone_offset_minutes)
+    window_start_iso = to_iso_utc(window_start_utc)
+    row = conn.execute(
+        """
+        SELECT languages
+        FROM user_daily_activity
+        WHERE user_id = ? AND local_day = ?
+        """,
+        (user_id, local_day),
+    ).fetchone()
+    languages_json = _merge_activity_languages(row["languages"] if row else None, language)
+
+    conn.execute(
+        f"""
+        INSERT INTO user_daily_activity (
+            user_id, local_day, window_start_at, timezone_offset_minutes,
+            reader_sentence_count, word_state_count, srs_review_count, srs_new_count,
+            languages, first_activity_at, last_activity_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, local_day)
+        DO UPDATE SET
+            {count_column} = {count_column} + excluded.{count_column},
+            languages = excluded.languages,
+            last_activity_at = excluded.last_activity_at
+        """,
+        (
+            user_id,
+            local_day,
+            window_start_iso,
+            timezone_offset_minutes,
+            count if count_column == "reader_sentence_count" else 0,
+            count if count_column == "word_state_count" else 0,
+            count if count_column == "srs_review_count" else 0,
+            count if count_column == "srs_new_count" else 0,
+            languages_json,
+            now_iso,
+            now_iso,
+        ),
+    )
+
+
+def build_streak_response(conn: Any, user_id: str, timezone_offset_minutes: int) -> StreakResponse:
+    now = datetime.now(UTC)
+    today_local_day, _, window_end_utc = hreader_local_day(now, timezone_offset_minutes)
+    today = date.fromisoformat(today_local_day)
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM user_daily_activity
+        WHERE user_id = ?
+        ORDER BY local_day ASC
+        """,
+        (user_id,),
+    ).fetchall()
+    active_days = {date.fromisoformat(row["local_day"]) for row in rows}
+    last_active = max(active_days).isoformat() if active_days else None
+
+    def contiguous_count(end_day: date) -> int:
+        count = 0
+        current = end_day
+        while current in active_days:
+            count += 1
+            current -= timedelta(days=1)
+        return count
+
+    active_today = today in active_days
+    yesterday = today - timedelta(days=1)
+    if active_today:
+        current_streak = contiguous_count(today)
+    elif yesterday in active_days:
+        current_streak = contiguous_count(yesterday)
+    else:
+        current_streak = 0
+
+    longest_streak = 0
+    previous_day: date | None = None
+    running = 0
+    for active_day in sorted(active_days):
+        if previous_day and active_day == previous_day + timedelta(days=1):
+            running += 1
+        else:
+            running = 1
+        longest_streak = max(longest_streak, running)
+        previous_day = active_day
+
+    row_by_day = {row["local_day"]: row for row in rows}
+    days: list[StreakDay] = []
+    for index in range(6, -1, -1):
+        day = today - timedelta(days=index)
+        key = day.isoformat()
+        row = row_by_day.get(key)
+        if row:
+            try:
+                languages = json.loads(row["languages"] or "[]")
+            except json.JSONDecodeError:
+                languages = []
+            days.append(
+                StreakDay(
+                    local_day=key,
+                    active=True,
+                    is_today=day == today,
+                    reader_sentence_count=row["reader_sentence_count"],
+                    word_state_count=row["word_state_count"],
+                    srs_review_count=row["srs_review_count"],
+                    srs_new_count=row["srs_new_count"],
+                    languages=languages,
+                )
+            )
+        else:
+            days.append(
+                StreakDay(
+                    local_day=key,
+                    active=False,
+                    is_today=day == today,
+                    reader_sentence_count=0,
+                    word_state_count=0,
+                    srs_review_count=0,
+                    srs_new_count=0,
+                    languages=[],
+                )
+            )
+
+    return StreakResponse(
+        current_streak=current_streak,
+        longest_streak=longest_streak,
+        active_today=active_today,
+        today_local_day=today_local_day,
+        next_reset_at=to_iso_utc(window_end_utc),
+        last_active_local_day=last_active,
+        days=days,
+    )
+
+
 def row_to_srs_card(row: Any) -> SrsCardResponse:
     return row_to_srs_card_with_display(row, row["normalized_word"])
 
@@ -957,7 +1133,13 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         return {"status": "deleted"}
 
     @app.get("/v1/users/{user_id}/texts/{text_id}/sentences/{sentence_index}", response_model=SentenceResponse)
-    def load_sentence(user_id: str, text_id: str, sentence_index: int, conn: Any = Depends(get_conn)) -> SentenceResponse:
+    def load_sentence(
+        user_id: str,
+        text_id: str,
+        sentence_index: int,
+        timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
+        conn: Any = Depends(get_conn),
+    ) -> SentenceResponse:
         user_id = ensure_uuid(user_id, "user_id")
         text_id = ensure_uuid(text_id, "text_id")
         ensure_active_user(conn, user_id)
@@ -978,13 +1160,21 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         tokens = tokenize_eligible(sentence_text, text_language)
 
         now = utc_now_iso()
-        conn.execute(
+        read_cursor = conn.execute(
             """
             INSERT OR IGNORE INTO sentences_read (user_id, text_id, sentence_index, word_count, read_at)
             VALUES (?, ?, ?, ?, ?)
             """,
             (user_id, text_id, sentence_index, len(tokens), now),
         )
+        if read_cursor.rowcount > 0:
+            record_daily_activity(
+                conn,
+                user_id,
+                language=text_language,
+                activity_type="reader_sentence",
+                timezone_offset_minutes=timezone_offset_minutes,
+            )
         missing = sorted({tok.normalized_word for tok in tokens})
         for normalized_word in missing:
             conn.execute(
@@ -1106,6 +1296,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         normalized_word: str,
         payload: WordStateUpdateRequest,
         language: str = Query(default="hebrew"),
+        timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
         conn: Any = Depends(get_conn),
     ) -> WordStateResponse:
         user_id = ensure_uuid(user_id, "user_id")
@@ -1131,6 +1322,14 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 (user_id, language, normalized, payload.state, now, now),
             )
             _sync_srs_card(conn, user_id, normalized, payload.state, now, language)
+            if payload.state in ("known", "unknown"):
+                record_daily_activity(
+                    conn,
+                    user_id,
+                    language=language,
+                    activity_type="word_state",
+                    timezone_offset_minutes=timezone_offset_minutes,
+                )
             conn.commit()
             row = conn.execute(
                 "SELECT * FROM user_words WHERE user_id = ? AND language = ? AND normalized_word = ?",
@@ -1145,6 +1344,14 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 (payload.state, now, user_id, language, normalized),
             )
             _sync_srs_card(conn, user_id, normalized, payload.state, now, language)
+            if payload.state in ("known", "unknown"):
+                record_daily_activity(
+                    conn,
+                    user_id,
+                    language=language,
+                    activity_type="word_state",
+                    timezone_offset_minutes=timezone_offset_minutes,
+                )
             conn.commit()
             existing = conn.execute(
                 "SELECT * FROM user_words WHERE user_id = ? AND language = ? AND normalized_word = ?",
@@ -1301,6 +1508,14 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 (now_iso, now_iso, now_iso, user_id, language, *selected_words),
             )
             increment_daily_new_count(conn, user_id, window_start_iso, len(selected_words), language)
+            record_daily_activity(
+                conn,
+                user_id,
+                language=language,
+                activity_type="srs_new",
+                count=len(selected_words),
+                timezone_offset_minutes=payload.timezone_offset_minutes,
+            )
             conn.commit()
             updated_rows = conn.execute(
                 f"""
@@ -1393,6 +1608,13 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
                 """,
                 (to_iso_utc(wrong_due), now_iso, now_iso, user_id, language, normalized),
             )
+        record_daily_activity(
+            conn,
+            user_id,
+            language=language,
+            activity_type="srs_review",
+            timezone_offset_minutes=payload.timezone_offset_minutes,
+        )
         conn.commit()
 
         updated = conn.execute(
@@ -1454,6 +1676,16 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         text_row = ensure_user_text(conn, user_id, text_id)
         text_language = text_row["language"] if "language" in text_row.keys() else "hebrew"
         return parse_progress(conn, user_id, text_id, text_language)
+
+    @app.get("/v1/users/{user_id}/streak", response_model=StreakResponse)
+    def get_streak(
+        user_id: str,
+        timezone_offset_minutes: int = Query(default=0, ge=-840, le=840),
+        conn: Any = Depends(get_conn),
+    ) -> StreakResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        return build_streak_response(conn, user_id, timezone_offset_minutes)
 
     @app.get("/v1/users/{user_id}/words/{normalized_word}/meanings", response_model=MeaningsListResponse)
     def list_meanings(

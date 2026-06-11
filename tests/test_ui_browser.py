@@ -199,6 +199,101 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str, tmp_
         browser.close()
 
 
+def test_streak_chips_and_progress_card_render_with_focus_and_dark_readability(live_server: str, tmp_path: Path) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        user_resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users",
+                method="POST",
+                data=json.dumps({"display_name": "Streak User"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        user_id = json.load(user_resp)["user_id"]
+
+        urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}/v1/users/{user_id}/texts",
+                method="POST",
+                data=json.dumps({"title": "Streak Text", "content": "שָׁלוֹם לָכֶם. אָבָא אִמָא."}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+
+        context = browser.new_context(base_url=live_server, viewport={"width": 1280, "height": 800})
+        page = context.new_page()
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
+        page.goto("/", wait_until="networkidle")
+
+        page.wait_for_selector("#streak-header-chip")
+        assert page.locator("#streak-header-chip").inner_text().strip() == "Start today"
+        page.focus("#streak-header-chip")
+        assert page.evaluate("() => document.activeElement.id") == "streak-header-chip"
+        focus_style = page.evaluate(
+            """
+            () => {
+              const style = getComputedStyle(document.getElementById('streak-header-chip'));
+              return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+            }
+            """
+        )
+        assert focus_style["outlineStyle"] != "none"
+        assert focus_style["outlineWidth"] != "0px"
+        page.locator("#app-header").screenshot(path=str(tmp_path / "streak-header-chip.png"))
+
+        page.click(".text-widget")
+        page.wait_for_selector(".sentence-word")
+        page.wait_for_function("() => document.getElementById('streak-reader-chip').textContent.includes('1 day streak')")
+        reader_chip = page.locator("#streak-reader-chip")
+        assert reader_chip.is_visible()
+        reader_chip.screenshot(path=str(tmp_path / "streak-reader-chip.png"))
+
+        page.click("#reader-exit-btn")
+        page.wait_for_selector("#streak-header-chip")
+        page.click("#streak-header-chip")
+        page.wait_for_selector("#streak-progress-card")
+        page.wait_for_function("() => document.getElementById('streak-progress-current').textContent.includes('1 day streak')")
+        assert page.locator("#streak-day-strip .streak-day").count() == 7
+        page.locator("#streak-progress-card").screenshot(path=str(tmp_path / "streak-progress-card.png"))
+
+        readability = page.evaluate(
+            """
+            () => {
+              const chip = document.getElementById('streak-header-chip');
+              const card = document.getElementById('streak-progress-card');
+              const chipStyle = getComputedStyle(chip);
+              const cardStyle = getComputedStyle(card);
+              const currentStyle = getComputedStyle(document.getElementById('streak-progress-current'));
+              return {
+                chipColor: chipStyle.color,
+                chipBackground: chipStyle.backgroundColor,
+                cardBackground: cardStyle.backgroundColor,
+                currentColor: currentStyle.color,
+                chipVisible: chip.getBoundingClientRect().width > 80,
+                cardVisible: card.getBoundingClientRect().height > 70,
+              };
+            }
+            """
+        )
+        assert readability["chipVisible"] is True
+        assert readability["cardVisible"] is True
+        assert readability["chipColor"] != readability["chipBackground"]
+        assert readability["currentColor"] != readability["cardBackground"]
+        assert (tmp_path / "streak-header-chip.png").stat().st_size > 0
+        assert (tmp_path / "streak-reader-chip.png").stat().st_size > 0
+        assert (tmp_path / "streak-progress-card.png").stat().st_size > 0
+
+        context.close()
+        browser.close()
+
+
 def test_reader_words_stay_clickable_during_generate_request(live_server: str) -> None:
     playwright = pytest.importorskip("playwright.sync_api")
 

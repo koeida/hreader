@@ -32,6 +32,7 @@
         <button class="lang-btn" data-lang="latin">Latin</button>
       </div>
       <div class="nav-right">
+        <button id="streak-header-chip" class="streak-chip" type="button" data-streak-state="empty" aria-label="Open Progress streak details">Start today</button>
         <a href="#" id="logout-link" class="logout-link">Logout</a>
       </div>
     </header>
@@ -161,8 +162,8 @@
 
         <div id="reader-state" class="state" role="status" aria-live="polite"></div>
         <div class="nav-row">
-          <button id="prev-sentence" type="button" title="Go to previous sentence">Previous</button>
-          <button id="next-sentence" type="button" title="Go to next sentence">Next</button>
+          <button id="prev-sentence" type="button" title="Go to previous sentence" disabled>Previous</button>
+          <button id="next-sentence" type="button" title="Go to next sentence" disabled>Next</button>
         </div>
 
         <div class="sentence-ai-tools">
@@ -299,6 +300,14 @@
           </div>
         </div>
         <div id="progress-state" class="state" role="status" aria-live="polite"></div>
+        <section id="streak-progress-card" class="streak-card" data-streak-state="empty" aria-label="Practice streak">
+          <div>
+            <p class="streak-card-kicker">Practice streak</p>
+            <div id="streak-progress-current" class="streak-card-current">Start today</div>
+            <div id="streak-progress-meta" class="streak-card-meta">Longest streak: 0 days</div>
+          </div>
+          <div id="streak-day-strip" class="streak-day-strip" aria-label="Recent streak days"></div>
+        </section>
         <div class="progress-chart-wrap">
           <canvas id="progress-chart"></canvas>
         </div>
@@ -319,6 +328,7 @@
 
     <!-- Reader exit button -->
     <button id="reader-exit-btn" class="reader-exit-btn" title="Exit Reader">← Library</button>
+    <span id="streak-reader-chip" class="streak-chip streak-chip--reader" data-streak-state="empty" aria-label="Current practice streak">Start today</span>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script type="module" src="/static/app.js"></script>

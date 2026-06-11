@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi.testclient import TestClient
 
 from app.db import get_connection, init_db
-from app.main import create_app
+from app.main import create_app, hreader_local_day, record_daily_activity
 from app.meanings import MeaningGenerationError
 
 
@@ -49,6 +49,21 @@ def create_text(client: TestClient, user_id: str, title: str, content: str) -> s
     resp = client.post(f"/v1/users/{user_id}/texts", json={"title": title, "content": content})
     assert resp.status_code == 200
     return resp.json()["text_id"]
+
+
+def local_noon_utc(local_day: date, timezone_offset_minutes: int = 300) -> datetime:
+    return datetime.combine(local_day, time(hour=12), tzinfo=UTC) + timedelta(minutes=timezone_offset_minutes)
+
+
+def activity_rows(client: TestClient, user_id: str) -> list:
+    conn = get_connection(client.app.state.db_path)
+    try:
+        return conn.execute(
+            "SELECT * FROM user_daily_activity WHERE user_id = ? ORDER BY local_day ASC",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
 
 
 def test_health_and_unknown_v1_route(tmp_path: Path) -> None:
@@ -249,6 +264,181 @@ def test_text_progress_and_list_embedded_progress(tmp_path: Path) -> None:
         listed = client.get(f"/v1/users/{user_id}/texts")
         assert listed.status_code == 200
         assert listed.json()["items"][0]["progress"] == after.json()
+
+
+def test_streak_day_boundary_uses_0330_local_window() -> None:
+    before_boundary = datetime(2026, 6, 10, 7, 29, tzinfo=UTC)  # 02:29 local with offset 300
+    after_boundary = datetime(2026, 6, 10, 8, 30, tzinfo=UTC)  # 03:30 local with offset 300
+
+    before_day, before_start, before_end = hreader_local_day(before_boundary, 300)
+    after_day, after_start, after_end = hreader_local_day(after_boundary, 300)
+
+    assert before_day == "2026-06-09"
+    assert before_start == datetime(2026, 6, 9, 8, 30, tzinfo=UTC)
+    assert before_end == datetime(2026, 6, 10, 8, 30, tzinfo=UTC)
+    assert after_day == "2026-06-10"
+    assert after_start == datetime(2026, 6, 10, 8, 30, tzinfo=UTC)
+    assert after_end == datetime(2026, 6, 11, 8, 30, tzinfo=UTC)
+
+
+def test_streak_records_eligible_activity_and_ignores_ineligible_actions(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        text_id = create_text(client, user_id, "T", "שָׁלוֹם. בַּיִת.")
+
+        client.patch(f"/v1/users/{user_id}/texts/{text_id}", json={"title": "Renamed"})
+        assert activity_rows(client, user_id) == []
+
+        sentence = client.get(
+            f"/v1/users/{user_id}/texts/{text_id}/sentences/0?timezone_offset_minutes=300"
+        )
+        assert sentence.status_code == 200
+        rows = activity_rows(client, user_id)
+        assert len(rows) == 1
+        assert rows[0]["reader_sentence_count"] == 1
+        assert rows[0]["word_state_count"] == 0
+
+        repeated = client.get(
+            f"/v1/users/{user_id}/texts/{text_id}/sentences/0?timezone_offset_minutes=300"
+        )
+        assert repeated.status_code == 200
+        assert activity_rows(client, user_id)[0]["reader_sentence_count"] == 1
+
+        known = client.put(
+            f"/v1/users/{user_id}/words/שלום?timezone_offset_minutes=300",
+            json={"state": "known"},
+        )
+        assert known.status_code == 200
+        same_known = client.put(
+            f"/v1/users/{user_id}/words/שלום?timezone_offset_minutes=300",
+            json={"state": "known"},
+        )
+        assert same_known.status_code == 200
+        never_seen = client.put(
+            f"/v1/users/{user_id}/words/שלום?timezone_offset_minutes=300",
+            json={"state": "never_seen"},
+        )
+        assert never_seen.status_code == 200
+        row = activity_rows(client, user_id)[0]
+        assert row["word_state_count"] == 1
+
+        meaning = client.post(
+            f"/v1/users/{user_id}/words/שלום/meanings",
+            json={"meaning_text": "peace"},
+        )
+        assert meaning.status_code == 200
+        assert activity_rows(client, user_id)[0]["word_state_count"] == 1
+
+
+def test_streak_records_srs_new_and_review_activity(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        create_text(client, user_id, "T", "שָׁלוֹם.")
+        client.put(f"/v1/users/{user_id}/words/שלום?timezone_offset_minutes=300", json={"state": "unknown"})
+
+        add_new = client.post(
+            f"/v1/users/{user_id}/srs/session/add-new",
+            json={"count": 1, "timezone_offset_minutes": 300, "language": "hebrew"},
+        )
+        assert add_new.status_code == 200
+        added = add_new.json()["added_cards"]
+        assert len(added) == 1
+
+        review = client.post(
+            f"/v1/users/{user_id}/srs/review",
+            json={
+                "normalized_word": added[0]["normalized_word"],
+                "result": "right",
+                "language": "hebrew",
+                "timezone_offset_minutes": 300,
+            },
+        )
+        assert review.status_code == 200
+
+        row = activity_rows(client, user_id)[0]
+        assert row["word_state_count"] == 1
+        assert row["srs_new_count"] == 1
+        assert row["srs_review_count"] == 1
+
+
+def test_streak_current_longest_alive_broken_and_language_aggregation(tmp_path: Path) -> None:
+    with make_client(tmp_path) as client:
+        user_id = create_user(client)
+        today = date.fromisoformat(hreader_local_day(datetime.now(UTC), 300)[0])
+
+        conn = get_connection(client.app.state.db_path)
+        try:
+            for offset in (4, 3, 1):
+                record_daily_activity(
+                    conn,
+                    user_id,
+                    language="hebrew",
+                    activity_type="reader_sentence",
+                    timezone_offset_minutes=300,
+                    now_utc=local_noon_utc(today - timedelta(days=offset)),
+                )
+            record_daily_activity(
+                conn,
+                user_id,
+                language="latin",
+                activity_type="word_state",
+                timezone_offset_minutes=300,
+                now_utc=local_noon_utc(today - timedelta(days=1)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        alive = client.get(f"/v1/users/{user_id}/streak?timezone_offset_minutes=300")
+        assert alive.status_code == 200
+        alive_data = alive.json()
+        assert alive_data["active_today"] is False
+        assert alive_data["current_streak"] == 1
+        assert alive_data["longest_streak"] == 2
+        assert alive_data["last_active_local_day"] == (today - timedelta(days=1)).isoformat()
+        yesterday = [day for day in alive_data["days"] if day["local_day"] == (today - timedelta(days=1)).isoformat()][0]
+        assert yesterday["reader_sentence_count"] == 1
+        assert yesterday["word_state_count"] == 1
+        assert yesterday["languages"] == ["hebrew", "latin"]
+
+        conn = get_connection(client.app.state.db_path)
+        try:
+            record_daily_activity(
+                conn,
+                user_id,
+                language="hebrew",
+                activity_type="srs_review",
+                timezone_offset_minutes=300,
+                now_utc=local_noon_utc(today),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        continued = client.get(f"/v1/users/{user_id}/streak?timezone_offset_minutes=300").json()
+        assert continued["active_today"] is True
+        assert continued["current_streak"] == 2
+        assert continued["longest_streak"] == 2
+
+        broken_user = create_user(client, "Broken")
+        conn = get_connection(client.app.state.db_path)
+        try:
+            record_daily_activity(
+                conn,
+                broken_user,
+                language="hebrew",
+                activity_type="reader_sentence",
+                timezone_offset_minutes=300,
+                now_utc=local_noon_utc(today - timedelta(days=2)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        broken = client.get(f"/v1/users/{broken_user}/streak?timezone_offset_minutes=300").json()
+        assert broken["active_today"] is False
+        assert broken["current_streak"] == 0
+        assert broken["longest_streak"] == 1
 
 
 def test_text_list_embeds_last_read_timestamp(tmp_path: Path) -> None:

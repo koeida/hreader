@@ -175,6 +175,61 @@ body {
     0 1px 2px rgba(0, 0, 0, 0.16);
 }
 
+.streak-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  max-width: 16rem;
+  padding: 0 0.75rem;
+  border: 1px solid rgba(224, 168, 64, 0.38);
+  border-radius: 8px;
+  background: rgba(224, 168, 64, 0.08);
+  color: #f0c36a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.streak-chip::before {
+  content: "";
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(224, 168, 64, 0.12);
+}
+
+button.streak-chip {
+  cursor: pointer;
+}
+
+button.streak-chip:hover {
+  transform: none;
+  filter: none;
+  background: rgba(224, 168, 64, 0.13);
+}
+
+.streak-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px var(--focus-ring-soft);
+}
+
+.streak-chip[data-streak-state="active"] {
+  border-color: rgba(92, 224, 122, 0.44);
+  background: rgba(92, 224, 122, 0.08);
+  color: #8ee8a0;
+}
+
+.streak-chip[data-streak-state="broken"],
+.streak-chip[data-streak-state="empty"] {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
 .logout-link {
   color: var(--muted);
   text-decoration: none;
@@ -707,6 +762,17 @@ body {
   display: none;
 }
 
+#section-reader > .panel-title-row {
+  padding-right: 260px;
+}
+
+#reader-meta {
+  max-width: min(760px, calc(100vw - 560px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Reader Exit Button */
 #reader-exit-btn {
   position: fixed;
@@ -740,6 +806,18 @@ body {
 #reader-exit-btn:hover {
   background: var(--surface-hover);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.streak-chip--reader {
+  position: fixed;
+  top: 20px;
+  right: 72px;
+  z-index: 200;
+  display: none;
+}
+
+.streak-chip--reader.active {
+  display: inline-flex;
 }
 
 /* SRS Section */
@@ -1487,6 +1565,80 @@ textarea:focus-visible {
   border-radius: 8px;
   padding: 1rem 1.05rem 0.95rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.streak-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin: 0.9rem 0 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(224, 168, 64, 0.28);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(224, 168, 64, 0.08), transparent 55%),
+    color-mix(in srgb, var(--surface) 46%, transparent);
+}
+
+.streak-card[data-streak-state="active"] {
+  border-color: rgba(92, 224, 122, 0.34);
+  background:
+    linear-gradient(90deg, rgba(92, 224, 122, 0.075), transparent 55%),
+    color-mix(in srgb, var(--surface) 46%, transparent);
+}
+
+.streak-card-kicker {
+  margin: 0 0 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.streak-card-current {
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.streak-card-meta {
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.streak-day-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 2rem);
+  gap: 0.4rem;
+}
+
+.streak-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.streak-day[data-active="true"] {
+  border-color: rgba(224, 168, 64, 0.45);
+  background: rgba(224, 168, 64, 0.12);
+  color: #f0c36a;
+}
+
+.streak-day[data-today="true"] {
+  outline: 2px solid var(--focus-ring-soft);
+  outline-offset: 2px;
 }
 
 .progress-controls {

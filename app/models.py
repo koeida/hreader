@@ -184,6 +184,7 @@ class SrsReviewRequest(BaseModel):
     normalized_word: str = Field(min_length=1)
     result: Literal["right", "wrong"]
     language: str = "hebrew"
+    timezone_offset_minutes: int = Field(default=0, ge=-840, le=840)
 
 
 class SrsReviewResponse(BaseModel):
@@ -248,6 +249,27 @@ class WordsReadSummary(BaseModel):
     daily_rate_14d: float
     projected_month: int
     projected_year: int
+
+
+class StreakDay(BaseModel):
+    local_day: str
+    active: bool
+    is_today: bool
+    reader_sentence_count: int
+    word_state_count: int
+    srs_review_count: int
+    srs_new_count: int
+    languages: list[str]
+
+
+class StreakResponse(BaseModel):
+    current_streak: int
+    longest_streak: int
+    active_today: bool
+    today_local_day: str
+    next_reset_at: datetime
+    last_active_local_day: str | None
+    days: list[StreakDay]
 
 
 class SrsHistoryBucket(BaseModel):

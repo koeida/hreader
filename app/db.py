@@ -141,6 +141,24 @@ def init_db(conn: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_sentences_read_user_date ON sentences_read(user_id, read_at);
 
+        CREATE TABLE IF NOT EXISTS user_daily_activity (
+            user_id TEXT NOT NULL,
+            local_day TEXT NOT NULL,
+            window_start_at TEXT NOT NULL,
+            timezone_offset_minutes INTEGER NOT NULL,
+            reader_sentence_count INTEGER NOT NULL DEFAULT 0,
+            word_state_count INTEGER NOT NULL DEFAULT 0,
+            srs_review_count INTEGER NOT NULL DEFAULT 0,
+            srs_new_count INTEGER NOT NULL DEFAULT 0,
+            languages TEXT NOT NULL DEFAULT '[]',
+            first_activity_at TEXT NOT NULL,
+            last_activity_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, local_day),
+            FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_user_daily_activity_user_day ON user_daily_activity(user_id, local_day);
+
         CREATE TABLE IF NOT EXISTS dictionary_cache (
             language TEXT NOT NULL DEFAULT 'hebrew',
             normalized_word TEXT NOT NULL,

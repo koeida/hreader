@@ -68,6 +68,9 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="srs-delete-card"' in html.text
     assert 'id="srs-postpone-btn"' in html.text
     assert 'id="postpone-slider"' in html.text
+    assert 'id="streak-header-chip"' in html.text
+    assert 'id="streak-reader-chip"' in html.text
+    assert 'id="streak-progress-card"' in html.text
 
     assert "onSentenceWordActivated" in js.text
     assert "cycleState" in js.text
@@ -87,6 +90,9 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert "toggleReaderInitialPresentation" in js.text
     assert 'event.key === "F4"' in js.text
     assert "animateSelectionPulse" in js.text
+    assert "getStreak" in js.text
+    assert "loadStreak" in js.text
+    assert "renderStreak" in js.text
 
 
 def test_frontend_has_stale_request_guards_for_async_panels(tmp_path: Path) -> None:
@@ -149,3 +155,7 @@ def test_frontend_styles_support_inline_panel_and_selected_word_pulse(tmp_path: 
     assert 'width: min(1500px, calc(100vw - 6rem));' in css.text
     assert ".app.view-srs" in css.text
     assert ".srs-front-word" in css.text
+    assert ".streak-chip:focus-visible" in css.text
+    assert ".streak-chip--reader.active" in css.text
+    assert ".streak-card" in css.text
+    assert ".streak-day-strip" in css.text

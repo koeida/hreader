@@ -72,8 +72,11 @@ class ApiClient {
     return this.request(`/v1/users/${userId}/texts/${textId}`, { method: "DELETE" });
   }
 
-  loadSentence(userId, textId, sentenceIndex) {
-    return this.request(`/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}`, { method: "GET" });
+  loadSentence(userId, textId, sentenceIndex, timezoneOffsetMinutes = 0) {
+    return this.request(
+      `/v1/users/${userId}/texts/${textId}/sentences/${sentenceIndex}?timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}`,
+      { method: "GET" }
+    );
   }
 
   markSentenceNikkudOff(userId, textId, sentenceIndex) {
@@ -91,8 +94,8 @@ class ApiClient {
     });
   }
 
-  updateWordState(userId, normalizedWord, state, language = "hebrew") {
-    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}?language=${encodeURIComponent(language)}`, {
+  updateWordState(userId, normalizedWord, state, language = "hebrew", timezoneOffsetMinutes = 0) {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}?language=${encodeURIComponent(language)}&timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}`, {
       method: "PUT",
       body: JSON.stringify({ state }),
     });
@@ -172,10 +175,10 @@ class ApiClient {
     });
   }
 
-  submitSrsReview(userId, normalizedWord, result, language = "hebrew") {
+  submitSrsReview(userId, normalizedWord, result, language = "hebrew", timezoneOffsetMinutes = 0) {
     return this.request(`/v1/users/${userId}/srs/review`, {
       method: "POST",
-      body: JSON.stringify({ normalized_word: normalizedWord, result, language }),
+      body: JSON.stringify({ normalized_word: normalizedWord, result, language, timezone_offset_minutes: timezoneOffsetMinutes }),
     });
   }
 
@@ -203,6 +206,13 @@ class ApiClient {
 
   getWordsReadSummary(userId, language = "hebrew") {
     return this.request(`/v1/users/${userId}/progress/words-read-summary?language=${encodeURIComponent(language)}`, { method: "GET" });
+  }
+
+  getStreak(userId, timezoneOffsetMinutes) {
+    return this.request(
+      `/v1/users/${userId}/streak?timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}`,
+      { method: "GET" }
+    );
   }
 
   postponeSrs(userId, targetDueCount, tzOffsetMinutes = 0, language = "hebrew") {
@@ -304,6 +314,7 @@ const state = {
   srsDailyNewRemaining: 0,
   srsAvailableNewCount: 0,
   srsDailyResetAt: "",
+  streak: null,
   srsUndoHistory: [], // Stack of {card, result, definitions, mnemonic}
   srsCardFlipped: false,
   postponeDueDates: [], // ISO strings of due_at for all currently-due cards
@@ -323,6 +334,7 @@ const state = {
     srsSession: 0,
     srsDetails: 0,
     srsReview: 0,
+    streak: 0,
     progressHistory: 0,
     wordsReadHistory: 0,
     srsHistory: 0,
@@ -417,6 +429,12 @@ const el = {
   srsReturnLibrary: document.getElementById("srs-return-library"),
   backupStatus: document.getElementById("backup-status"),
   navProgress: document.getElementById("nav-progress"),
+  streakHeaderChip: document.getElementById("streak-header-chip"),
+  streakReaderChip: document.getElementById("streak-reader-chip"),
+  streakProgressCard: document.getElementById("streak-progress-card"),
+  streakProgressCurrent: document.getElementById("streak-progress-current"),
+  streakProgressMeta: document.getElementById("streak-progress-meta"),
+  streakDayStrip: document.getElementById("streak-day-strip"),
   sectionProgress: document.getElementById("section-progress"),
   progressState: document.getElementById("progress-state"),
   progressChartCanvas: document.getElementById("progress-chart"),
@@ -536,6 +554,9 @@ function updateViewVisibility() {
 
   // Hide/show exit button
   el.readerExitBtn.classList.toggle("active", v === "reader");
+  if (el.streakReaderChip) {
+    el.streakReaderChip.classList.toggle("active", loggedIn && v === "reader");
+  }
 
   // Update nav button active state
   if (el.navLibrary) el.navLibrary.classList.toggle("active", v === "library");
@@ -552,6 +573,7 @@ function switchView(view) {
     void loadSrsSession();
   }
   if (view === "progress" && state.isLoggedIn) {
+    void loadStreak();
     void loadProgressData();
     void loadWordsReadData();
     void loadWordsReadSummary();
@@ -594,7 +616,7 @@ async function handleUserPick(userId) {
   hideUserSelection();
   updateLanguageSwitcher();
   updateDirectionAttributes();
-  await Promise.all([loadTexts(), loadWords()]);
+  await Promise.all([loadTexts(), loadWords(), loadStreak()]);
   switchView("library");
 }
 
@@ -602,9 +624,11 @@ function handleLogout() {
   state.activeUserId = "";
   state.isLoggedIn = false;
   state.selectedTextId = null;
+  state.streak = null;
   localStorage.removeItem("active_user_id");
   el.userPicker.value = "";
   updateLanguageSwitcher();
+  renderStreak();
   showUserSelection();
 }
 
@@ -650,6 +674,7 @@ function handleLanguageSwitch(lang) {
     void loadWordsReadData();
     void loadWordsReadSummary();
     void loadSrsHistoryData();
+    void loadStreak();
   }
 }
 
@@ -1035,6 +1060,7 @@ function clearUserScopedViews() {
   el.wordsNextPage.disabled = true;
   clearWordDetailsPanel();
   clearSrsState();
+  state.streak = null;
   state.progressRange = "month";
   state.progressShowUnique = false;
   if (el.progressUniqueToggle) el.progressUniqueToggle.checked = false;
@@ -1045,6 +1071,7 @@ function clearUserScopedViews() {
   setStateMessage(el.wordsReadState, "");
   setStateMessage(el.srsHistoryState, "");
   if (el.wordsReadSummary) el.wordsReadSummary.innerHTML = "";
+  renderStreak();
 }
 
 function clearSrsState() {
@@ -1067,6 +1094,89 @@ function clearSrsState() {
 
 function timezoneOffsetMinutes() {
   return new Date().getTimezoneOffset();
+}
+
+function streakLabel(data) {
+  if (!data) return "Start today";
+  const count = data.current_streak || 0;
+  if (data.active_today && count > 0) {
+    return `${count} day streak`;
+  }
+  if (!data.active_today && count > 0) {
+    return `Practice today to keep ${count}`;
+  }
+  return data.last_active_local_day ? "Start a new streak" : "Start today";
+}
+
+function streakState(data) {
+  if (!data || !data.last_active_local_day) return "empty";
+  if (data.active_today) return "active";
+  if ((data.current_streak || 0) > 0) return "alive";
+  return "broken";
+}
+
+function renderStreak() {
+  const data = state.streak;
+  const label = streakLabel(data);
+  const visualState = streakState(data);
+  const current = data?.current_streak || 0;
+  const longest = data?.longest_streak || 0;
+  const activeTodayText = data?.active_today ? "complete today" : "today incomplete";
+
+  for (const chip of [el.streakHeaderChip, el.streakReaderChip]) {
+    if (!chip) continue;
+    chip.textContent = label;
+    chip.dataset.streakState = visualState;
+  }
+
+  if (el.streakProgressCard) {
+    el.streakProgressCard.dataset.streakState = visualState;
+  }
+  if (el.streakProgressCurrent) {
+    el.streakProgressCurrent.textContent = label;
+  }
+  if (el.streakProgressMeta) {
+    const reset = data?.next_reset_at
+      ? new Date(data.next_reset_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "";
+    el.streakProgressMeta.textContent = `Longest streak: ${longest} days | ${activeTodayText}${reset ? ` | resets ${reset}` : ""}`;
+  }
+  if (el.streakDayStrip) {
+    el.streakDayStrip.innerHTML = "";
+    for (const day of data?.days || []) {
+      const item = document.createElement("span");
+      item.className = "streak-day";
+      item.dataset.active = day.active ? "true" : "false";
+      item.dataset.today = day.is_today ? "true" : "false";
+      item.title = `${day.local_day}: ${day.active ? "active" : "missed"}`;
+      item.setAttribute("aria-label", item.title);
+      item.textContent = new Date(`${day.local_day}T12:00:00`).toLocaleDateString([], { weekday: "short" }).slice(0, 1);
+      el.streakDayStrip.appendChild(item);
+    }
+  }
+}
+
+async function loadStreak() {
+  const requestVersion = nextRequestVersion("streak");
+  if (!state.activeUserId) {
+    state.streak = null;
+    renderStreak();
+    return;
+  }
+  try {
+    const data = await state.api.getStreak(state.activeUserId, timezoneOffsetMinutes());
+    if (!isCurrentRequest("streak", requestVersion)) {
+      return;
+    }
+    state.streak = data;
+    renderStreak();
+  } catch (_) {
+    if (!isCurrentRequest("streak", requestVersion)) {
+      return;
+    }
+    state.streak = null;
+    renderStreak();
+  }
 }
 
 function srsReinsertWrongCard(card) {
@@ -1269,7 +1379,7 @@ async function submitSrsResult(result) {
   }
   const requestVersion = nextRequestVersion("srsReview");
   try {
-    await state.api.submitSrsReview(state.activeUserId, card.normalized_word, result, state.currentLanguage);
+    await state.api.submitSrsReview(state.activeUserId, card.normalized_word, result, state.currentLanguage, timezoneOffsetMinutes());
     if (!isCurrentRequest("srsReview", requestVersion)) {
       return;
     }
@@ -1292,6 +1402,7 @@ async function submitSrsResult(result) {
     state.srsCardFlipped = false;
     setStateMessage(el.srsState, "");
     renderSrs();
+    void loadStreak();
   } catch (err) {
     if (!isCurrentRequest("srsReview", requestVersion)) {
       return;
@@ -1350,7 +1461,7 @@ async function undoSrsReview() {
   try {
     // Reverse the previous submission
     const reverseResult = undoEntry.result === "wrong" ? "right" : "wrong";
-    await state.api.submitSrsReview(state.activeUserId, undoEntry.card.normalized_word, reverseResult, state.currentLanguage);
+    await state.api.submitSrsReview(state.activeUserId, undoEntry.card.normalized_word, reverseResult, state.currentLanguage, timezoneOffsetMinutes());
 
     if (!isCurrentRequest("srsUndo", requestVersion)) {
       return;
@@ -1959,7 +2070,22 @@ async function loadSentence() {
 
   try {
     setStateMessage(el.readerState, "Loading...");
-    const data = await state.api.loadSentence(requestedUserId, requestedTextId, requestedSentenceIndex);
+    el.prevSentence.disabled = true;
+    el.nextSentence.disabled = true;
+    const data = await state.api.loadSentence(requestedUserId, requestedTextId, requestedSentenceIndex, timezoneOffsetMinutes());
+    if (
+      !isCurrentRequest("sentence", requestVersion) ||
+      requestedUserId !== state.activeUserId ||
+      requestedTextId !== state.openTextId ||
+      requestedSentenceIndex !== state.sentenceIndex
+    ) {
+      return;
+    }
+    try {
+      await state.api.updateTextPosition(requestedUserId, requestedTextId, data.sentence_index);
+    } catch (_) {
+      // Don't block reader rendering if position persistence fails.
+    }
     if (
       !isCurrentRequest("sentence", requestVersion) ||
       requestedUserId !== state.activeUserId ||
@@ -1969,12 +2095,8 @@ async function loadSentence() {
       return;
     }
     renderSentence(data);
-    try {
-      await state.api.updateTextPosition(requestedUserId, requestedTextId, data.sentence_index);
-    } catch (_) {
-      // Don't block reader rendering if position persistence fails.
-    }
     setStateMessage(el.readerState, "");
+    void loadStreak();
   } catch (err) {
     if (!isCurrentRequest("sentence", requestVersion)) {
       return;
@@ -2028,8 +2150,8 @@ function renderWords(data) {
       select.appendChild(option);
     }
     select.onchange = async () => {
-      await state.api.updateWordState(state.activeUserId, item.normalized_word, select.value, state.currentLanguage);
-      await Promise.all([loadWords(), loadTexts()]);
+      await state.api.updateWordState(state.activeUserId, item.normalized_word, select.value, state.currentLanguage, timezoneOffsetMinutes());
+      await Promise.all([loadWords(), loadTexts(), loadStreak()]);
     };
     li.appendChild(select);
     el.wordsList.appendChild(li);
@@ -2653,11 +2775,12 @@ async function onSentenceWordActivated(word) {
   const requestVersion = nextRequestVersion("wordSave");
   const wordAtSaveStart = word;
   try {
-    await state.api.updateWordState(state.activeUserId, wordAtSaveStart, nextState, state.currentLanguage);
+    await state.api.updateWordState(state.activeUserId, wordAtSaveStart, nextState, state.currentLanguage, timezoneOffsetMinutes());
     if (!isCurrentRequest("wordSave", requestVersion) || state.selectedWord !== wordAtSaveStart) {
       return;
     }
     setStateMessage(el.wordDetailsState, "");
+    void loadStreak();
   } catch (err) {
     if (!isCurrentRequest("wordSave", requestVersion) || state.selectedWord !== wordAtSaveStart) {
       return;
@@ -2784,6 +2907,12 @@ if (el.navProgress) {
   };
 }
 
+if (el.streakHeaderChip) {
+  el.streakHeaderChip.onclick = () => {
+    switchView("progress");
+  };
+}
+
 if (el.srsReturnLibrary) {
   el.srsReturnLibrary.onclick = () => {
     switchView("library");
@@ -2855,7 +2984,7 @@ if (el.createUserForm) {
       localStorage.setItem("active_user_id", state.activeUserId);
       el.newUserName.value = "";
       await loadUsers();
-      await Promise.all([loadTexts(), loadWords()]);
+      await Promise.all([loadTexts(), loadWords(), loadStreak()]);
       hideUserSelection();
       switchView("library");
     } catch (err) {
@@ -2870,7 +2999,7 @@ if (el.activeUser) {
     localStorage.setItem("active_user_id", state.activeUserId);
     clearUserScopedViews();
     state.wordsLimit = Number(el.wordsLimit?.value || 50);
-    await Promise.all([loadTexts(), loadWords()]);
+    await Promise.all([loadTexts(), loadWords(), loadStreak()]);
     if (state.currentView === "srs") {
       await loadSrsSession();
     }
@@ -3061,7 +3190,7 @@ document.addEventListener("keydown", async (event) => {
     try {
       await Promise.all(
         toMark.map((t) =>
-          state.api.updateWordState(state.activeUserId, t.normalized_word, "known", state.currentLanguage)
+          state.api.updateWordState(state.activeUserId, t.normalized_word, "known", state.currentLanguage, timezoneOffsetMinutes())
         )
       );
       // Update local token states and re-render
@@ -3069,6 +3198,7 @@ document.addEventListener("keydown", async (event) => {
         t.state = "known";
       }
       renderSentence();
+      void loadStreak();
     } catch (_) {
       // Silent fail — no UI disruption for a secret shortcut
     }
@@ -3157,6 +3287,7 @@ el.srsAddNewForm.onsubmit = async (event) => {
     applySrsSessionData(data.added_cards, data);
     setStateMessage(el.srsState, "");
     renderSrs();
+    void loadStreak();
   } catch (err) {
     setStateMessage(el.srsState, String(err.message || err), true);
   } finally {
@@ -3251,7 +3382,7 @@ window.addEventListener("keydown", (event) => {
     updateViewVisibility();
     updateLanguageSwitcher();
     updateDirectionAttributes();
-    await Promise.all([loadTexts(), loadWords()]);
+    await Promise.all([loadTexts(), loadWords(), loadStreak()]);
     hideUserSelection();
   } else {
     // No logged-in user, show only the modal on blank page
@@ -3262,6 +3393,8 @@ window.addEventListener("keydown", (event) => {
     el.sectionSrs.classList.remove("active");
     el.sectionReader.classList.remove("active");
     el.readerExitBtn.classList.remove("active");
+    if (el.streakReaderChip) el.streakReaderChip.classList.remove("active");
+    renderStreak();
     showUserSelection();
   }
 })();
