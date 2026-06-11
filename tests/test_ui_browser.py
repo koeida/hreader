@@ -441,6 +441,155 @@ def test_library_featured_last_read_and_sort_switcher(live_server: str, tmp_path
         browser.close()
 
 
+def test_library_card_tactile_states_and_desktop_screenshot(live_server: str, tmp_path: Path) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+
+    def post_json(path: str, payload: dict) -> dict:
+        resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}{path}",
+                method="POST",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        return json.load(resp)
+
+    def put_json(path: str, payload: dict) -> dict:
+        resp = urllib.request.urlopen(
+            urllib.request.Request(
+                f"{live_server}{path}",
+                method="PUT",
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        return json.load(resp)
+
+    user_id = post_json("/v1/users", {"display_name": "Card Tactile User"})["user_id"]
+    first_id = post_json(
+        f"/v1/users/{user_id}/texts",
+        {"title": "Card States One", "content": "אָבָא אִמָא יֶלֶד סֵפֶר.", "language": "hebrew"},
+    )["text_id"]
+    post_json(
+        f"/v1/users/{user_id}/texts",
+        {"title": "Card States Two", "content": "שָׁלוֹם בַּיִת דָּנָה.", "language": "hebrew"},
+    )
+    put_json(f"/v1/users/{user_id}/words/{urllib.parse.quote('אבא')}", {"state": "known"})
+    put_json(f"/v1/users/{user_id}/words/{urllib.parse.quote('אמא')}", {"state": "unknown"})
+    urllib.request.urlopen(f"{live_server}/v1/users/{user_id}/texts/{first_id}/sentences/0").close()
+
+    with playwright.sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(headless=True)
+        except playwright.Error as exc:
+            pytest.skip(f"Playwright browser runtime unavailable: {exc}")
+
+        context = browser.new_context(base_url=live_server, viewport={"width": 1440, "height": 900})
+        page = context.new_page()
+        page.add_init_script(f"localStorage.setItem('active_user_id', '{user_id}')")
+        page.goto("/", wait_until="networkidle")
+        page.wait_for_selector(".text-widget")
+
+        assert page.locator(".text-widget").count() == 2
+        layout_contract = page.evaluate(
+            """
+            () => {
+              const cards = Array.from(document.querySelectorAll('.text-widget'));
+              const rects = cards.map((card) => card.getBoundingClientRect());
+              const stats = cards.map((card) => card.querySelector('.text-widget__stats').getBoundingClientRect());
+              const buttons = cards.flatMap((card) => Array.from(card.querySelectorAll('.action-buttons button')));
+              const buttonRects = buttons.map((button) => button.getBoundingClientRect());
+              return {
+                ok: rects.every((rect) => rect.width >= 500 && rect.height >= 70 && rect.height <= 130)
+                  && stats.every((rect) => rect.height <= 48)
+                  && buttonRects.every((rect) => rect.width === 32 && rect.height === 32),
+                reason: `cards=${rects.map((r) => `${r.width}x${r.height}`).join(';')}; stats=${stats.map((r) => r.height).join(',')}; buttons=${buttonRects.map((r) => `${r.width}x${r.height}`).join(',')}`,
+              };
+            }
+            """
+        )
+        assert layout_contract["ok"] is True, layout_contract["reason"]
+
+        screenshot_path = tmp_path / "library-card-tactile-states.png"
+        page.locator("#library-grid").screenshot(path=str(screenshot_path))
+        assert screenshot_path.stat().st_size > 0
+
+        card = page.locator(".text-widget").first
+        rename = card.locator(".action-buttons button").first
+        delete = card.locator(".action-buttons button").nth(1)
+
+        base_card_style = card.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { borderColor: style.borderColor, boxShadow: style.boxShadow, transform: style.transform };
+            }"""
+        )
+        card.hover()
+        hover_card_style = card.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { borderColor: style.borderColor, boxShadow: style.boxShadow };
+            }"""
+        )
+        assert hover_card_style["borderColor"] != base_card_style["borderColor"]
+        assert hover_card_style["boxShadow"] != base_card_style["boxShadow"]
+
+        card.focus()
+        focus_card_style = card.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { borderLeftColor: style.borderLeftColor, boxShadow: style.boxShadow };
+            }"""
+        )
+        assert focus_card_style["boxShadow"] != base_card_style["boxShadow"]
+
+        rename.hover()
+        rename_hover_style = rename.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { color: style.color, boxShadow: style.boxShadow };
+            }"""
+        )
+        delete.hover()
+        delete_hover_style = delete.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { color: style.color, borderColor: style.borderColor };
+            }"""
+        )
+        assert rename_hover_style["boxShadow"] != "none"
+        assert delete_hover_style["color"] != rename_hover_style["color"]
+
+        delete.focus()
+        assert page.evaluate("() => document.activeElement.getAttribute('aria-label').startsWith('Delete')")
+        button_focus_style = delete.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+            }"""
+        )
+        assert button_focus_style["outlineStyle"] != "none"
+        assert button_focus_style["outlineWidth"] != "0px"
+
+        rename.evaluate("node => { node.disabled = true; }")
+        page.wait_for_function(
+            "node => Number(getComputedStyle(node).opacity) < 0.6",
+            arg=rename.element_handle(),
+        )
+        disabled_style = rename.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              return { cursor: style.cursor, opacity: style.opacity };
+            }"""
+        )
+        assert disabled_style["cursor"] == "not-allowed"
+        assert float(disabled_style["opacity"]) < 0.6
+
+        context.close()
+        browser.close()
+
+
 def test_reader_sentence_enforces_rtl_word_bubble_order(live_server: str) -> None:
     playwright = pytest.importorskip("playwright.sync_api")
 
