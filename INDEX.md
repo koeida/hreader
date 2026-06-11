@@ -30,6 +30,7 @@ Start here: **[`README.md`](README.md)**
    - `specs/srs-feature-spec.md` — Spaced repetition system
    - `specs/auto-backup-plan.md` — Daily backup automation
    - `specs/word-details-reader-panel-spec.md` — Inline word details UI
+   - `specs/streak-counter-plan.md` — Streak semantics and implementation plan
 3. Review `docs/DEVELOPER.md` for code patterns
 4. Write tests in `tests/` before coding
 5. Run `make test` to validate
@@ -63,6 +64,7 @@ Start here: **[`README.md`](README.md)**
 | [`specs/srs-feature-spec.md`](specs/srs-feature-spec.md) | SRS design & implementation | SRS feature work |
 | [`specs/auto-backup-plan.md`](specs/auto-backup-plan.md) | Backup strategy & testing | Backup work |
 | [`specs/word-details-reader-panel-spec.md`](specs/word-details-reader-panel-spec.md) | Inline word details UI | Reader/UI work |
+| [`specs/streak-counter-plan.md`](specs/streak-counter-plan.md) | Streak semantics, UX placement, and implementation beads | Streak feature work |
 | [`docs/visual-qa.md`](docs/visual-qa.md) | UI screenshot checklist | QA, design review |
 | [`docs/ui-beauty-spec.md`](docs/ui-beauty-spec.md) | Design guidelines | UI/CSS work |
 | [`docs/v1-checklist.md`](docs/v1-checklist.md) | Feature completion tracker | Project leads |
