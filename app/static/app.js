@@ -304,6 +304,7 @@ const state = {
   readerMeaningValue: "",
   readerPresentationLayerIndex: 0,
   readerInitialPresentation: localStorage.getItem("reader_initial_presentation") || "rashi",
+  readerMode: localStorage.getItem("reader_mode") || "default",
   srsDueQueue: [],
   srsCurrentCard: null,
   srsRevealed: false,
@@ -356,6 +357,7 @@ const el = {
   sectionReader: document.getElementById("section-reader"),
   sectionSrs: document.getElementById("section-srs"),
   readerExitBtn: document.getElementById("reader-exit-btn"),
+  readerModeBtn: document.getElementById("reader-mode-btn"),
   libraryGrid: document.getElementById("library-grid"),
   includeDeleted: document.getElementById("include-deleted"),
   refreshUsers: document.getElementById("refresh-users"),
@@ -559,6 +561,7 @@ function updateViewVisibility() {
 
   // Hide/show exit button
   el.readerExitBtn.classList.toggle("active", v === "reader");
+  if (el.readerModeBtn) el.readerModeBtn.classList.toggle("active", v === "reader");
   if (el.streakReaderChip) {
     el.streakReaderChip.classList.toggle("active", loggedIn && v === "reader");
   }
@@ -922,6 +925,16 @@ async function selectTextForReading(textId) {
 function handleReaderExit() {
   state.selectedTextId = null;
   switchView("library");
+}
+
+function applyReaderMode(mode) {
+  state.readerMode = mode;
+  localStorage.setItem("reader_mode", mode);
+  el.sectionReader.classList.toggle("mode-spotlight", mode === "spotlight");
+  if (el.readerModeBtn) {
+    el.readerModeBtn.classList.toggle("spotlight-on", mode === "spotlight");
+    el.readerModeBtn.title = mode === "spotlight" ? "Exit spotlight" : "Immersive spotlight";
+  }
 }
 
 async function handleEditText(textId, currentTitle) {
@@ -3001,6 +3014,14 @@ if (el.readerExitBtn) {
     handleReaderExit();
   };
 }
+
+if (el.readerModeBtn) {
+  el.readerModeBtn.onclick = () => {
+    applyReaderMode(state.readerMode === "spotlight" ? "default" : "spotlight");
+  };
+}
+
+applyReaderMode(state.readerMode);
 
 window.addEventListener("pointermove", (event) => {
   const x = `${Math.round((event.clientX / window.innerWidth) * 100)}%`;

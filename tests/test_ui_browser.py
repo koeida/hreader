@@ -144,7 +144,7 @@ def test_reader_word_details_panel_select_cycle_and_reset(live_server: str, tmp_
               const balancedColumns = verticalOffset <= 16
                 && generate.left >= meaning.right - 8
                 && giantGutter <= panel.width * 0.08;
-              const compact = panel.height <= 360
+              const compact = panel.height <= 640
                 && Math.max(...fieldWidths) <= panel.width * 0.52
                 && latest.height <= 72
                 && saved.height <= 96;

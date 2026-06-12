@@ -894,6 +894,77 @@ button.streak-chip:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+/* Reader mode toggle button */
+#reader-mode-btn {
+  position: fixed;
+  top: 20px;
+  right: 184px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+#reader-mode-btn.active {
+  display: flex;
+}
+
+#reader-mode-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+#reader-mode-btn.spotlight-on {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-strong));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  color: var(--accent);
+}
+
+/* Immersive Spotlight mode */
+#section-reader.mode-spotlight {
+  padding-top: clamp(60px, 8vh, 120px);
+  background:
+    radial-gradient(ellipse 110% 45% at 50% 8%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 65%),
+    var(--bg);
+}
+
+#section-reader.mode-spotlight > .sentence {
+  font-size: clamp(3.8rem, 5vw, 5.5rem);
+  line-height: 2.0;
+  max-width: min(1000px, 88vw);
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 0.8rem;
+}
+
+#section-reader.mode-spotlight .sentence-word.active {
+  box-shadow:
+    0 0 0 1px var(--focus-ring-accent),
+    0 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 0.08em 0 rgba(255, 255, 255, 0.035),
+    inset 0 -0.14em 0 var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #section-reader.mode-spotlight {
+    background: var(--bg);
+  }
+}
+
 .streak-chip--reader {
   position: fixed;
   top: 20px;
@@ -1400,7 +1471,7 @@ textarea:focus-visible {
 }
 
 .word-details-panel #word-dict-results {
-  max-height: 56px;
+  max-height: 240px;
   margin-top: 0;
   overflow-y: auto;
   padding-right: 0.28rem;
