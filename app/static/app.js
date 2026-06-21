@@ -384,6 +384,7 @@ const el = {
   grammarPanel: document.getElementById("grammar-panel"),
   restateText: document.getElementById("restate-text"),
   grammarText: document.getElementById("grammar-text"),
+  spotlightBar: document.getElementById("spotlight-bar"),
   wordDetailsPanel: document.getElementById("word-details-panel"),
   wordDetailsWord: document.getElementById("word-details-word"),
   wordDetailsStatus: document.getElementById("word-details-status"),
@@ -524,6 +525,22 @@ function requireUser() {
   }
 }
 
+function renderSpotlightBar() {
+  if (!el.spotlightBar) return;
+  const inSpotlight = state.readerMode === "spotlight";
+  const word = state.selectedWord;
+  if (!inSpotlight || !word) {
+    el.spotlightBar.classList.remove("visible");
+    el.spotlightBar.textContent = "";
+    return;
+  }
+  const meaning = state.readerMeaningValue;
+  const mnemonic = state.readerMnemonicValue;
+  const parts = [meaning, mnemonic].filter(Boolean);
+  el.spotlightBar.textContent = parts.length ? parts.join("  ·  ") : word;
+  el.spotlightBar.classList.add("visible");
+}
+
 function clearWordDetailsPanel() {
   state.selectedWord = "";
   state.readerMnemonicValue = "";
@@ -542,6 +559,7 @@ function clearWordDetailsPanel() {
   renderInlineEditDisplays();
   el.meaningsPreview.innerHTML = "";
   el.meaningsList.innerHTML = "";
+  renderSpotlightBar();
 }
 
 // === View Management Functions ===
@@ -931,10 +949,12 @@ function applyReaderMode(mode) {
   state.readerMode = mode;
   localStorage.setItem("reader_mode", mode);
   el.sectionReader.classList.toggle("mode-spotlight", mode === "spotlight");
+  document.body.classList.toggle("spotlight-active", mode === "spotlight");
   if (el.readerModeBtn) {
     el.readerModeBtn.classList.toggle("spotlight-on", mode === "spotlight");
     el.readerModeBtn.title = mode === "spotlight" ? "Exit spotlight" : "Immersive spotlight";
   }
+  renderSpotlightBar();
 }
 
 async function handleEditText(textId, currentTitle) {
@@ -2347,6 +2367,7 @@ function renderMeanings(data) {
   const newest = items[items.length - 1] || null;
   state.readerMeaningId = newest?.meaning_id || null;
   state.readerMeaningValue = newest?.meaning_text || "";
+  renderSpotlightBar();
   if (el.manualMeaning.classList.contains("is-hidden")) {
     renderInlineEditDisplays();
   }
@@ -2397,6 +2418,7 @@ function renderMeanings(data) {
 
 function renderWordDetails(data) {
   state.readerMnemonicValue = data?.mnemonic || "";
+  renderSpotlightBar();
   if (el.wordMnemonic.classList.contains("is-hidden")) {
     renderInlineEditDisplays();
   }
