@@ -2149,6 +2149,34 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         result["cached"] = False
         return result
 
+    # ── Tokenize route ──────────────────────────────────────────────────────
+
+    @app.get("/v1/users/{user_id}/tokenize")
+    def tokenize_text(user_id: str, text: str, language: str = "hebrew") -> dict:
+        tokens = tokenize_eligible(text, language)
+        if not tokens:
+            return {"tokens": []}
+        normalized_words = sorted({tok.normalized_word for tok in tokens})
+        with get_connection(db_path) as conn:
+            now = utc_now_iso()
+            for nw in normalized_words:
+                conn.execute(
+                    "INSERT OR IGNORE INTO user_words (user_id, language, normalized_word, state, created_at, updated_at) VALUES (?, ?, ?, 'never_seen', ?, ?)",
+                    (user_id, language, nw, now, now),
+                )
+            placeholders = ",".join("?" for _ in normalized_words)
+            state_rows = conn.execute(
+                f"SELECT normalized_word, state FROM user_words WHERE user_id=? AND language=? AND normalized_word IN ({placeholders})",
+                [user_id, language, *normalized_words],
+            ).fetchall()
+        state_map = {r["normalized_word"]: r["state"] for r in state_rows}
+        return {
+            "tokens": [
+                {"token": tok.token, "normalized_word": tok.normalized_word, "state": state_map.get(tok.normalized_word, "never_seen")}
+                for tok in tokens
+            ]
+        }
+
     # ── Torah routes ────────────────────────────────────────────────────────
 
     @app.get("/v1/torah/position/{user_id}", response_model=TorahPositionResponse)

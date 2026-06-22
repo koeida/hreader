@@ -3174,3 +3174,13 @@ textarea:focus-visible {
   color: var(--text-muted);
   direction: rtl;
 }
+
+.torah-word-panel {
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  direction: rtl;
+  text-align: right;
+  min-height: 2.5rem;
+}
