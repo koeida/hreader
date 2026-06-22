@@ -299,3 +299,33 @@ class SrsPostponeResponse(BaseModel):
     due_before: int
     due_after: int
     postponed_until: datetime
+
+
+# Torah mode models
+
+class TorahVerse(BaseModel):
+    verse: int
+    torah_he: str
+    modern_he: str | None = None
+    rashi_voweled: str | None = None
+
+
+class TorahChapterResponse(BaseModel):
+    book: str
+    chapter: int
+    verses: list[TorahVerse]
+
+
+class TorahPositionResponse(BaseModel):
+    user_id: str
+    book: str
+    chapter: int
+    verse: int
+    updated_at: str
+
+
+class TorahPositionUpdate(BaseModel):
+    book: str
+    chapter: int
+    verse: int
+    timezone_offset_minutes: int = 0

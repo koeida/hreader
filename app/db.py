@@ -168,6 +168,31 @@ def init_db(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             PRIMARY KEY (language, normalized_word)
         );
+
+        CREATE TABLE IF NOT EXISTS torah_content (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book TEXT NOT NULL,
+            chapter INTEGER NOT NULL,
+            verse INTEGER NOT NULL,
+            torah_he TEXT NOT NULL,
+            modern_he TEXT,
+            rashi_raw TEXT,
+            rashi_voweled TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(book, chapter, verse)
+        );
+
+        CREATE TABLE IF NOT EXISTS torah_positions (
+            user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            book TEXT NOT NULL,
+            chapter INTEGER NOT NULL,
+            verse INTEGER NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, book)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_torah_content_book_chapter ON torah_content(book, chapter);
+        CREATE INDEX IF NOT EXISTS idx_torah_positions_user ON torah_positions(user_id);
         """
     )
     conn.commit()

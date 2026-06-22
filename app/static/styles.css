@@ -3066,3 +3066,111 @@ textarea:focus-visible {
 .srs-card-back .dict-results {
   font-size: 0.75rem;
 }
+
+/* ============================================================
+   Torah Mode
+   ============================================================ */
+
+.torah-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.torah-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  direction: rtl;
+  flex-shrink: 0;
+}
+
+.torah-selector-label {
+  color: var(--text-muted);
+}
+
+.torah-select {
+  font-size: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 2px 6px;
+  direction: rtl;
+}
+
+.torah-go-btn {
+  font-size: 0.8rem;
+  padding: 3px 10px;
+}
+
+.torah-reader {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 20px 24px 16px;
+  gap: 16px;
+}
+
+.torah-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 28px;
+  flex: 1;
+  align-items: start;
+}
+
+.torah-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.torah-col-header {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.torah-col-body {
+  font-size: 1.05rem;
+  line-height: 2.0;
+  color: var(--text);
+}
+
+.torah-col-source .torah-col-body {
+  font-size: 1.2rem;
+}
+
+.torah-col-rashi .torah-col-body {
+  font-size: 0.95rem;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.rashi-break {
+  display: block;
+  height: 0.7em;
+}
+
+.torah-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.torah-verse-indicator {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  direction: rtl;
+}

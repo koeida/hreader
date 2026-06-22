@@ -21,6 +21,7 @@
         <button id="nav-library" class="nav-button active" data-view="library">Library</button>
         <button id="nav-srs" class="nav-button" data-view="srs">SRS</button>
         <button id="nav-progress" class="nav-button" data-view="progress">Progress</button>
+        <button id="nav-torah" class="nav-button" data-view="torah">Torah</button>
         <!-- Keep old view button IDs for backward compatibility with tests -->
         <button id="view-library" style="display: none;" data-view-target="library"></button>
         <button id="view-reader" style="display: none;" data-view-target="reader"></button>
@@ -323,6 +324,43 @@
         <div class="progress-chart-wrap">
           <canvas id="srs-history-chart"></canvas>
         </div>
+      </section>
+
+      <!-- Torah Section -->
+      <section id="section-torah" class="view-section torah-section">
+        <div id="torah-selector" class="torah-selector">
+          <span class="torah-selector-label">ספר:</span>
+          <select id="torah-book-select" class="torah-select">
+            <option value="Bereshit">בראשית</option>
+          </select>
+          <span class="torah-selector-label">פרק:</span>
+          <select id="torah-chapter-select" class="torah-select">
+            <option value="1">א׳</option>
+          </select>
+          <button id="torah-go-btn" type="button" class="torah-go-btn">עבור</button>
+        </div>
+        <div id="torah-reader" class="torah-reader is-hidden">
+          <div class="torah-columns">
+            <div class="torah-col torah-col-source" lang="he" dir="rtl">
+              <div class="torah-col-header">תורה</div>
+              <div id="torah-col-source-body" class="torah-col-body"></div>
+            </div>
+            <div class="torah-col torah-col-modern" lang="he" dir="rtl">
+              <div class="torah-col-header">עברית מודרנית</div>
+              <div id="torah-col-modern-body" class="torah-col-body"></div>
+            </div>
+            <div class="torah-col torah-col-rashi" lang="he" dir="rtl">
+              <div class="torah-col-header">רש״י</div>
+              <div id="torah-col-rashi-body" class="torah-col-body"></div>
+            </div>
+          </div>
+          <div class="torah-nav-row">
+            <button id="torah-prev" type="button" disabled>◀ הקודם</button>
+            <span id="torah-verse-indicator" class="torah-verse-indicator"></span>
+            <button id="torah-next" type="button">הבא ▶</button>
+          </div>
+        </div>
+        <div id="torah-state" class="state" role="status" aria-live="polite"></div>
       </section>
     </main>
 

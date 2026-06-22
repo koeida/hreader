@@ -62,6 +62,10 @@ from app.models import (
     WordsReadBucket,
     WordsReadHistoryResponse,
     WordsReadSummary,
+    TorahChapterResponse,
+    TorahVerse,
+    TorahPositionResponse,
+    TorahPositionUpdate,
 )
 from app.dictionary import lookup_dictionary
 from app.tokenizer import NIKKUD_RE, normalize_token, tokenize_eligible
@@ -494,6 +498,30 @@ def row_to_word_details(row: Any, user_id: str, normalized_word: str) -> WordDet
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
+
+
+def row_to_torah_content(row: Any) -> dict:
+    return {
+        "id": row["id"],
+        "book": row["book"],
+        "chapter": row["chapter"],
+        "verse": row["verse"],
+        "torah_he": row["torah_he"],
+        "modern_he": row["modern_he"],
+        "rashi_raw": row["rashi_raw"],
+        "rashi_voweled": row["rashi_voweled"],
+        "created_at": row["created_at"],
+    }
+
+
+def row_to_torah_position(row: Any) -> dict:
+    return {
+        "user_id": row["user_id"],
+        "book": row["book"],
+        "chapter": row["chapter"],
+        "verse": row["verse"],
+        "updated_at": row["updated_at"],
+    }
 
 
 def row_to_text_position(row: Any, user_id: str, text_id: str) -> TextPositionResponse:
@@ -2120,6 +2148,68 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         conn.commit()
         result["cached"] = False
         return result
+
+    # ── Torah routes ────────────────────────────────────────────────────────
+
+    @app.get("/v1/torah/position/{user_id}", response_model=TorahPositionResponse)
+    def get_torah_position(user_id: str):
+        with get_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM torah_positions WHERE user_id=? AND book=?",
+                (user_id, "Bereshit"),
+            ).fetchone()
+        if not row:
+            return TorahPositionResponse(
+                user_id=user_id, book="Bereshit", chapter=1, verse=1,
+                updated_at=utc_now_iso(),
+            )
+        return TorahPositionResponse(**row_to_torah_position(row))
+
+    @app.put("/v1/torah/position/{user_id}", response_model=TorahPositionResponse)
+    def update_torah_position(user_id: str, body: TorahPositionUpdate):
+        now = utc_now_iso()
+        with get_connection(db_path) as conn:
+            conn.execute(
+                """INSERT INTO torah_positions (user_id, book, chapter, verse, updated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(user_id, book) DO UPDATE SET
+                       chapter=excluded.chapter,
+                       verse=excluded.verse,
+                       updated_at=excluded.updated_at""",
+                (user_id, body.book, body.chapter, body.verse, now),
+            )
+            record_daily_activity(
+                conn,
+                user_id,
+                language="hebrew",
+                activity_type="reader_sentence",
+                count=1,
+                timezone_offset_minutes=body.timezone_offset_minutes,
+            )
+        return TorahPositionResponse(
+            user_id=user_id, book=body.book, chapter=body.chapter,
+            verse=body.verse, updated_at=now,
+        )
+
+    @app.get("/v1/torah/{book}/{chapter}", response_model=TorahChapterResponse)
+    def get_torah_chapter(book: str, chapter: int):
+        with get_connection(db_path) as conn:
+            rows = conn.execute(
+                "SELECT * FROM torah_content WHERE book=? AND chapter=? ORDER BY verse",
+                (book, chapter),
+            ).fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"No content found for {book} {chapter}")
+        verses = [
+            TorahVerse(
+                verse=row["verse"],
+                torah_he=row["torah_he"],
+                modern_he=row["modern_he"],
+                rashi_voweled=row["rashi_voweled"],
+            )
+            for row in rows
+        ]
+        return TorahChapterResponse(book=book, chapter=chapter, verses=verses)
 
     return app
 

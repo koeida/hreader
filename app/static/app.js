@@ -226,6 +226,21 @@ class ApiClient {
   getDictionaryLookup(word, language = "hebrew") {
     return this.request(`/v1/dictionary/lookup?word=${encodeURIComponent(word)}&language=${encodeURIComponent(language)}`, { method: "GET" });
   }
+
+  getTorahChapter(book, chapter) {
+    return this.request(`/v1/torah/${encodeURIComponent(book)}/${chapter}`);
+  }
+
+  getTorahPosition(userId) {
+    return this.request(`/v1/torah/position/${userId}`);
+  }
+
+  updateTorahPosition(userId, book, chapter, verse, timezoneOffsetMins = 0) {
+    return this.request(`/v1/torah/position/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify({ book, chapter, verse, timezone_offset_minutes: timezoneOffsetMins }),
+    });
+  }
 }
 
 const READER_RASHI_PRESENTATION_LAYER = {
@@ -305,6 +320,10 @@ const state = {
   readerPresentationLayerIndex: 0,
   readerInitialPresentation: localStorage.getItem("reader_initial_presentation") || "rashi",
   readerMode: localStorage.getItem("reader_mode") || "default",
+  torahBook: "Bereshit",
+  torahChapter: 1,
+  torahVerse: 1,
+  torahVerses: [],
   srsDueQueue: [],
   srsCurrentCard: null,
   srsRevealed: false,
@@ -461,6 +480,20 @@ const el = {
     document.getElementById("progress-range-year"),
     document.getElementById("progress-range-all"),
   ],
+  navTorah: document.getElementById("nav-torah"),
+  sectionTorah: document.getElementById("section-torah"),
+  torahSelector: document.getElementById("torah-selector"),
+  torahReader: document.getElementById("torah-reader"),
+  torahState: document.getElementById("torah-state"),
+  torahColSourceBody: document.getElementById("torah-col-source-body"),
+  torahColModernBody: document.getElementById("torah-col-modern-body"),
+  torahColRashiBody: document.getElementById("torah-col-rashi-body"),
+  torahVerseIndicator: document.getElementById("torah-verse-indicator"),
+  torahPrev: document.getElementById("torah-prev"),
+  torahNext: document.getElementById("torah-next"),
+  torahBookSelect: document.getElementById("torah-book-select"),
+  torahChapterSelect: document.getElementById("torah-chapter-select"),
+  torahGoBtn: document.getElementById("torah-go-btn"),
 };
 const VIEW_ORDER = ["library", "reader", "words", "srs"];
 
@@ -576,6 +609,7 @@ function updateViewVisibility() {
   el.sectionSrs.classList.toggle("active", loggedIn && v === "srs");
   el.sectionProgress.classList.toggle("active", loggedIn && v === "progress");
   el.sectionReader.classList.toggle("active", loggedIn && v === "reader");
+  if (el.sectionTorah) el.sectionTorah.classList.toggle("active", loggedIn && v === "torah");
 
   // Hide/show exit button
   el.readerExitBtn.classList.toggle("active", v === "reader");
@@ -588,6 +622,7 @@ function updateViewVisibility() {
   if (el.navLibrary) el.navLibrary.classList.toggle("active", v === "library");
   if (el.navSrs) el.navSrs.classList.toggle("active", v === "srs");
   if (el.navProgress) el.navProgress.classList.toggle("active", v === "progress");
+  if (el.navTorah) el.navTorah.classList.toggle("active", v === "torah");
 }
 
 function switchView(view) {
@@ -597,6 +632,9 @@ function switchView(view) {
   // Side effects
   if (view === "srs" && state.isLoggedIn) {
     void loadSrsSession();
+  }
+  if (view === "torah" && state.isLoggedIn) {
+    void loadTorahView();
   }
   if (view === "progress" && state.isLoggedIn) {
     void loadStreak();
@@ -651,6 +689,17 @@ function handleLogout() {
   state.isLoggedIn = false;
   state.selectedTextId = null;
   state.streak = null;
+  state.torahBook = "Bereshit";
+  state.torahChapter = 1;
+  state.torahVerse = 1;
+  state.torahVerses = [];
+  if (el.torahColSourceBody) el.torahColSourceBody.textContent = "";
+  if (el.torahColModernBody) el.torahColModernBody.textContent = "";
+  if (el.torahColRashiBody) el.torahColRashiBody.innerHTML = "";
+  if (el.torahVerseIndicator) el.torahVerseIndicator.textContent = "";
+  if (el.torahPrev) el.torahPrev.disabled = true;
+  if (el.torahNext) el.torahNext.disabled = true;
+  if (el.torahReader) el.torahReader.classList.add("is-hidden");
   localStorage.removeItem("active_user_id");
   el.userPicker.value = "";
   updateLanguageSwitcher();
@@ -1633,6 +1682,74 @@ if (el.postponeConfirm) {
 
 if (el.postponeSlider) {
   el.postponeSlider.addEventListener("input", updatePostponePreview);
+}
+
+function renderTorahVerse(verse) {
+  el.torahColSourceBody.textContent = verse.torah_he || "";
+  el.torahColModernBody.textContent = verse.modern_he || "";
+
+  el.torahColRashiBody.innerHTML = "";
+  if (verse.rashi_voweled) {
+    const parts = verse.rashi_voweled.split(" ◆ ");
+    parts.forEach((part, i) => {
+      const span = document.createElement("span");
+      span.textContent = part;
+      el.torahColRashiBody.appendChild(span);
+      if (i < parts.length - 1) {
+        const br = document.createElement("span");
+        br.className = "rashi-break";
+        el.torahColRashiBody.appendChild(br);
+      }
+    });
+  }
+
+  const total = state.torahVerses.length;
+  el.torahVerseIndicator.textContent = `בראשית א׳:${verse.verse}  (${verse.verse}/${total})`;
+  el.torahPrev.disabled = verse.verse <= 1;
+  el.torahNext.disabled = verse.verse >= total;
+}
+
+function navigateTorahVerse(delta) {
+  const target = state.torahVerse + delta;
+  const verse = state.torahVerses.find(v => v.verse === target);
+  if (!verse) return;
+  state.torahVerse = target;
+  renderTorahVerse(verse);
+  if (state.activeUserId) {
+    void state.api.updateTorahPosition(
+      state.activeUserId, state.torahBook, state.torahChapter, target,
+      timezoneOffsetMinutes()
+    );
+  }
+}
+
+async function loadTorahView() {
+  if (!state.activeUserId) return;
+  setStateMessage(el.torahState, "Loading…");
+  if (el.torahReader) el.torahReader.classList.add("is-hidden");
+
+  try {
+    const [posData, chapterData] = await Promise.all([
+      state.api.getTorahPosition(state.activeUserId),
+      state.api.getTorahChapter(state.torahBook, state.torahChapter),
+    ]);
+
+    state.torahBook = posData.book;
+    state.torahChapter = posData.chapter;
+    state.torahVerse = posData.verse;
+    state.torahVerses = chapterData.verses;
+
+    if (el.torahBookSelect) el.torahBookSelect.value = state.torahBook;
+    if (el.torahChapterSelect) el.torahChapterSelect.value = String(state.torahChapter);
+
+    setStateMessage(el.torahState, "");
+    if (el.torahReader) el.torahReader.classList.remove("is-hidden");
+
+    const verse = state.torahVerses.find(v => v.verse === state.torahVerse) || state.torahVerses[0];
+    if (verse) renderTorahVerse(verse);
+  } catch (err) {
+    setStateMessage(el.torahState, `Error loading Torah: ${err.message}`, true);
+  }
 }
 
 async function loadProgressData() {
@@ -2979,6 +3096,33 @@ if (el.navProgress) {
   };
 }
 
+if (el.navTorah) {
+  el.navTorah.onclick = () => {
+    switchView("torah");
+  };
+}
+
+if (el.torahPrev) {
+  el.torahPrev.onclick = () => navigateTorahVerse(-1);
+}
+
+if (el.torahNext) {
+  el.torahNext.onclick = () => navigateTorahVerse(1);
+}
+
+if (el.torahGoBtn) {
+  el.torahGoBtn.onclick = async () => {
+    const book = el.torahBookSelect.value;
+    const chapter = parseInt(el.torahChapterSelect.value, 10);
+    state.torahBook = book;
+    state.torahChapter = chapter;
+    state.torahVerse = 1;
+    state.torahVerses = [];
+    if (el.torahReader) el.torahReader.classList.add("is-hidden");
+    await loadTorahView();
+  };
+}
+
 if (el.streakHeaderChip) {
   el.streakHeaderChip.onclick = () => {
     switchView("progress");
@@ -3285,6 +3429,15 @@ document.addEventListener("keydown", async (event) => {
       // Silent fail — no UI disruption for a secret shortcut
     }
     return;
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (state.currentView === "torah" && state.torahVerses.length > 0) {
+    const activeTag = document.activeElement?.tagName?.toLowerCase() || "";
+    if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") return;
+    if (event.key === "ArrowRight") { event.preventDefault(); navigateTorahVerse(1); return; }
+    if (event.key === "ArrowLeft") { event.preventDefault(); navigateTorahVerse(-1); return; }
   }
 });
 
