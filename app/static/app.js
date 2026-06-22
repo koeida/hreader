@@ -330,6 +330,10 @@ const state = {
   torahVerses: [],
   torahCurrentSourceText: "",
   torahCurrentTokenMap: null,
+  torahCurrentModernText: "",
+  torahCurrentModernTokenMap: null,
+  torahCurrentRashiText: "",
+  torahCurrentRashiTokenMap: null,
   srsDueQueue: [],
   srsCurrentCard: null,
   srsRevealed: false,
@@ -699,6 +703,12 @@ function handleLogout() {
   state.torahChapter = 1;
   state.torahVerse = 1;
   state.torahVerses = [];
+  state.torahCurrentSourceText = "";
+  state.torahCurrentTokenMap = null;
+  state.torahCurrentModernText = "";
+  state.torahCurrentModernTokenMap = null;
+  state.torahCurrentRashiText = "";
+  state.torahCurrentRashiTokenMap = null;
   if (el.torahColSourceBody) el.torahColSourceBody.textContent = "";
   if (el.torahColModernBody) el.torahColModernBody.textContent = "";
   if (el.torahColRashiBody) el.torahColRashiBody.innerHTML = "";
@@ -1732,20 +1742,78 @@ function renderTorahWordPanel(word) {
     return;
   }
   panel.classList.remove("is-hidden");
-  // Show meaning and mnemonic in a compact strip
   const meaning = state.readerMeaningValue || "";
   const mnemonic = state.readerMnemonicValue || "";
-  const parts = [meaning, mnemonic].filter(Boolean);
-  panel.textContent = parts.length ? parts.join("  ·  ") : `${word} — no meaning yet`;
+
+  panel.innerHTML = "";
+  if (meaning || mnemonic) {
+    const text = document.createElement("span");
+    text.className = "torah-word-panel-text";
+    text.textContent = [meaning, mnemonic].filter(Boolean).join("  ·  ");
+    panel.appendChild(text);
+  } else {
+    const hint = document.createElement("span");
+    hint.className = "torah-word-panel-hint";
+    hint.textContent = word;
+    panel.appendChild(hint);
+  }
+  const genBtn = document.createElement("button");
+  genBtn.type = "button";
+  genBtn.className = "torah-gen-btn";
+  genBtn.textContent = meaning ? "↺" : "Generate";
+  genBtn.title = "Generate meaning";
+  genBtn.onclick = () => void torahGenerateMeaning(word);
+  panel.appendChild(genBtn);
 }
 
-function setTorahSelectedWord(normalized) {
-  state.selectedWord = normalized;
-  // Re-render source column to update active state
+async function torahGenerateMeaning(word) {
+  const panel = document.getElementById("torah-word-panel");
+  if (!word || !state.activeUserId) return;
+  const btn = panel?.querySelector(".torah-gen-btn");
+  const origText = btn?.textContent || "Generate";
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = "…"; }
+    const verse = state.torahVerses.find(v => v.verse === state.torahVerse);
+    const contextText = verse?.torah_he || "";
+    await state.api.generateMeaning(state.activeUserId, word, contextText, state.currentLanguage);
+    if (state.selectedWord !== word) return;
+    await loadMeaningsForWord(word);
+  } catch (_) { /* non-fatal */ } finally {
+    if (btn && state.selectedWord === word) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+function reRenderTorahColumns() {
   if (state.torahCurrentTokenMap) {
     renderTorahSourceWords(el.torahColSourceBody, state.torahCurrentSourceText, state.torahCurrentTokenMap);
   }
-  // Load meanings and mnemonic (reuse existing functions — they populate state and call renderSpotlightBar)
+  if (state.torahCurrentModernTokenMap) {
+    renderTorahSourceWords(el.torahColModernBody, state.torahCurrentModernText, state.torahCurrentModernTokenMap);
+  }
+  if (state.torahCurrentRashiTokenMap) {
+    renderTorahRashiWords(el.torahColRashiBody, state.torahCurrentRashiText, state.torahCurrentRashiTokenMap);
+  }
+}
+
+function setTorahSelectedWord(normalized) {
+  if (state.selectedWord === normalized) {
+    // Cycle word state on second click
+    const currentState = state.torahCurrentTokenMap?.get(normalized) || "never_seen";
+    const nextState = cycleState(currentState);
+    if (state.torahCurrentTokenMap) state.torahCurrentTokenMap.set(normalized, nextState);
+    if (state.torahCurrentModernTokenMap) state.torahCurrentModernTokenMap.set(normalized, nextState);
+    if (state.torahCurrentRashiTokenMap) state.torahCurrentRashiTokenMap.set(normalized, nextState);
+    reRenderTorahColumns();
+    void (async () => {
+      try {
+        await state.api.updateWordState(state.activeUserId, normalized, nextState, state.currentLanguage, timezoneOffsetMinutes());
+        void loadStreak();
+      } catch (_) {}
+    })();
+    return;
+  }
+  state.selectedWord = normalized;
+  reRenderTorahColumns();
   state.readerMeaningValue = "";
   state.readerMnemonicValue = "";
   renderTorahWordPanel(normalized);
@@ -1754,11 +1822,14 @@ function setTorahSelectedWord(normalized) {
 }
 
 function renderTorahVerse(verse) {
-  // Store for word re-render after tokenization
   state.torahCurrentSourceText = verse.torah_he || "";
-  state.torahCurrentTokenMap = state.torahCurrentTokenMap || new Map();
+  state.torahCurrentModernText = verse.modern_he || "";
+  state.torahCurrentRashiText = verse.rashi_voweled || "";
+  state.torahCurrentTokenMap = new Map();
+  state.torahCurrentModernTokenMap = new Map();
+  state.torahCurrentRashiTokenMap = new Map();
 
-  // Render source as plain text first; tokenization updates it async
+  // Render plain text first; tokenization replaces with clickable words async
   el.torahColSourceBody.textContent = verse.torah_he || "";
   el.torahColModernBody.textContent = verse.modern_he || "";
 
@@ -1783,14 +1854,47 @@ function renderTorahVerse(verse) {
   el.torahNext.disabled = verse.verse >= total;
 }
 
-async function loadTorahTokens(torahHe) {
-  if (!state.activeUserId || !torahHe) return;
-  try {
-    const data = await state.api.tokenizeText(state.activeUserId, torahHe, "hebrew");
-    const tokenMap = new Map((data.tokens || []).map(t => [t.normalized_word, t.state]));
-    state.torahCurrentTokenMap = tokenMap;
-    renderTorahSourceWords(el.torahColSourceBody, torahHe, tokenMap);
-  } catch (_) { /* non-fatal — source text already shown as plain */ }
+function renderTorahRashiWords(container, rashiText, tokenMap) {
+  container.innerHTML = "";
+  if (!rashiText) return;
+  const parts = rashiText.split(" ◆ ");
+  parts.forEach((part, i) => {
+    const seg = document.createElement("span");
+    seg.className = "rashi-segment";
+    renderTorahSourceWords(seg, part, tokenMap);
+    container.appendChild(seg);
+    if (i < parts.length - 1) {
+      const br = document.createElement("span");
+      br.className = "rashi-break";
+      container.appendChild(br);
+    }
+  });
+}
+
+async function loadTorahAllTokens(verse) {
+  if (!state.activeUserId) return;
+  const torahHe = verse.torah_he || "";
+  const modernHe = verse.modern_he || "";
+  const rashiFlat = verse.rashi_voweled ? verse.rashi_voweled.replace(/ ◆ /g, " ") : "";
+
+  const [torahRes, modernRes, rashiRes] = await Promise.allSettled([
+    torahHe ? state.api.tokenizeText(state.activeUserId, torahHe, "hebrew") : Promise.resolve(null),
+    modernHe ? state.api.tokenizeText(state.activeUserId, modernHe, "hebrew") : Promise.resolve(null),
+    rashiFlat ? state.api.tokenizeText(state.activeUserId, rashiFlat, "hebrew") : Promise.resolve(null),
+  ]);
+
+  if (torahRes.status === "fulfilled" && torahRes.value) {
+    state.torahCurrentTokenMap = new Map((torahRes.value.tokens || []).map(t => [t.normalized_word, t.state]));
+    renderTorahSourceWords(el.torahColSourceBody, torahHe, state.torahCurrentTokenMap);
+  }
+  if (modernRes.status === "fulfilled" && modernRes.value) {
+    state.torahCurrentModernTokenMap = new Map((modernRes.value.tokens || []).map(t => [t.normalized_word, t.state]));
+    renderTorahSourceWords(el.torahColModernBody, modernHe, state.torahCurrentModernTokenMap);
+  }
+  if (rashiRes.status === "fulfilled" && rashiRes.value) {
+    state.torahCurrentRashiTokenMap = new Map((rashiRes.value.tokens || []).map(t => [t.normalized_word, t.state]));
+    renderTorahRashiWords(el.torahColRashiBody, verse.rashi_voweled || "", state.torahCurrentRashiTokenMap);
+  }
 }
 
 function navigateTorahVerse(delta) {
@@ -1803,7 +1907,7 @@ function navigateTorahVerse(delta) {
   renderTorahWordPanel(null);
   state.torahVerse = target;
   renderTorahVerse(verse);
-  void loadTorahTokens(verse.torah_he);
+  void loadTorahAllTokens(verse);
   if (state.activeUserId) {
     void state.api.updateTorahPosition(
       state.activeUserId, state.torahBook, state.torahChapter, target,
@@ -1837,7 +1941,7 @@ async function loadTorahView() {
     const verse = state.torahVerses.find(v => v.verse === state.torahVerse) || state.torahVerses[0];
     if (verse) {
       renderTorahVerse(verse);
-      void loadTorahTokens(verse.torah_he);
+      void loadTorahAllTokens(verse);
     }
   } catch (err) {
     setStateMessage(el.torahState, `Error loading Torah: ${err.message}`, true);
@@ -3530,8 +3634,8 @@ document.addEventListener("keydown", (event) => {
   if (state.currentView === "torah" && state.torahVerses.length > 0) {
     const activeTag = document.activeElement?.tagName?.toLowerCase() || "";
     if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") return;
-    if (event.key === "ArrowRight") { event.preventDefault(); navigateTorahVerse(1); return; }
-    if (event.key === "ArrowLeft") { event.preventDefault(); navigateTorahVerse(-1); return; }
+    if (event.key === "ArrowLeft") { event.preventDefault(); navigateTorahVerse(1); return; }
+    if (event.key === "ArrowRight") { event.preventDefault(); navigateTorahVerse(-1); return; }
   }
 });
 

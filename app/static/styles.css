@@ -3180,7 +3180,33 @@ textarea:focus-visible {
   border-top: 1px solid var(--border);
   font-size: 0.85rem;
   color: var(--text-muted);
-  direction: rtl;
-  text-align: right;
+  text-align: center;
   min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.torah-word-panel-hint {
+  font-size: 1rem;
+  color: var(--text);
+  direction: rtl;
+}
+.torah-word-panel-text {
+  direction: ltr;
+}
+.torah-gen-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.torah-gen-btn:hover {
+  background: var(--surface-hover, var(--surface));
+  color: var(--text);
 }
