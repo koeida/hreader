@@ -488,6 +488,7 @@ def row_to_word_details(row: Any, user_id: str, normalized_word: str) -> WordDet
             user_id=user_id,
             normalized_word=normalized_word,
             mnemonic=None,
+            mnemonic_reveal_count=0,
             created_at=None,
             updated_at=None,
         )
@@ -495,6 +496,7 @@ def row_to_word_details(row: Any, user_id: str, normalized_word: str) -> WordDet
         user_id=row["user_id"],
         normalized_word=row["normalized_word"],
         mnemonic=row["mnemonic"],
+        mnemonic_reveal_count=row["mnemonic_reveal_count"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -1892,7 +1894,7 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
 
         row = conn.execute(
             """
-            SELECT user_id, language, normalized_word, mnemonic, created_at, updated_at
+            SELECT user_id, language, normalized_word, mnemonic, mnemonic_reveal_count, created_at, updated_at
             FROM word_details
             WHERE user_id = ? AND language = ? AND normalized_word = ?
             """,
@@ -1937,7 +1939,43 @@ def create_app(db_path: str = str(DEFAULT_DB_PATH), meaning_generator: Any | Non
         conn.commit()
         row = conn.execute(
             """
-            SELECT user_id, language, normalized_word, mnemonic, created_at, updated_at
+            SELECT user_id, language, normalized_word, mnemonic, mnemonic_reveal_count, created_at, updated_at
+            FROM word_details
+            WHERE user_id = ? AND language = ? AND normalized_word = ?
+            """,
+            (user_id, language, normalized),
+        ).fetchone()
+        return row_to_word_details(row, user_id, normalized)
+
+    @app.post("/v1/users/{user_id}/words/{normalized_word}/details/reveal", response_model=WordDetailsResponse)
+    def reveal_word_details(
+        user_id: str,
+        normalized_word: str,
+        language: str = Query(default="hebrew"),
+        conn: Any = Depends(get_conn),
+    ) -> WordDetailsResponse:
+        user_id = ensure_uuid(user_id, "user_id")
+        ensure_active_user(conn, user_id)
+        try:
+            language = validate_language(language)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid_language")
+        normalized = normalize_token(normalized_word, language)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail="invalid_word")
+
+        conn.execute(
+            """
+            UPDATE word_details
+            SET mnemonic_reveal_count = mnemonic_reveal_count + 1
+            WHERE user_id = ? AND language = ? AND normalized_word = ? AND mnemonic IS NOT NULL AND trim(mnemonic) != ''
+            """,
+            (user_id, language, normalized),
+        )
+        conn.commit()
+        row = conn.execute(
+            """
+            SELECT user_id, language, normalized_word, mnemonic, mnemonic_reveal_count, created_at, updated_at
             FROM word_details
             WHERE user_id = ? AND language = ? AND normalized_word = ?
             """,

@@ -128,7 +128,9 @@
           <span id="word-details-word" class="sr-only">No word selected</span>
           <span id="word-details-status" class="sr-only">Unseen</span>
           <div id="word-details-state" class="state" role="status" aria-live="polite"></div>
+          <button id="mnemonic-reveal" class="mnemonic-reveal is-hidden" type="button" aria-label="Show full word details"></button>
 
+          <div id="word-details-full" class="word-details-full">
           <div class="word-details-controls">
             <form id="mnemonic-form" class="inline-edit-form">
               <label for="word-mnemonic">Mnemonic</label>
@@ -159,6 +161,8 @@
           <ul id="meanings-list" class="list"></ul>
 
           <div id="word-dict-results" class="dict-results"></div>
+          <p id="word-details-reveal-count" class="word-details-reveal-count"></p>
+          </div>
         </section>
 
         <div id="reader-state" class="state" role="status" aria-live="polite"></div>
@@ -191,6 +195,7 @@
 
         <div id="srs-reviewer" class="srs-reviewer is-hidden">
           <div class="srs-card-container">
+            <button id="srs-undo-btn" class="srs-undo-btn" type="button" title="Undo last answer (Ctrl+Z)" disabled>Undo</button>
             <button id="srs-delete-card" class="srs-delete-card" type="button" title="Delete this SRS card">Delete</button>
             <!-- Flip card -->
             <div class="srs-card-flip">

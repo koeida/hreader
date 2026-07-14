@@ -137,6 +137,7 @@ class WordDetailsResponse(BaseModel):
     user_id: str
     normalized_word: str
     mnemonic: str | None
+    mnemonic_reveal_count: int
     created_at: datetime | None
     updated_at: datetime | None
 

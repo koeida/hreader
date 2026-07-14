@@ -161,6 +161,10 @@ class ApiClient {
     });
   }
 
+  revealWordDetails(userId, normalizedWord, language = "hebrew") {
+    return this.request(`/v1/users/${userId}/words/${encodeURIComponent(normalizedWord)}/details/reveal?language=${encodeURIComponent(language)}`, { method: "POST" });
+  }
+
   getSrsSession(userId, timezoneOffsetMinutes, language = "hebrew") {
     return this.request(
       `/v1/users/${userId}/srs/session?timezone_offset_minutes=${encodeURIComponent(timezoneOffsetMinutes)}&language=${encodeURIComponent(language)}`,
@@ -319,10 +323,13 @@ const state = {
   isLoggedIn: !!localStorage.getItem("active_user_id"),
   selectedTextId: null,
   readerMnemonicValue: "",
+  readerMnemonicRevealCount: 0,
+  readerDetailsRevealed: false,
+  readerDetailsLoading: false,
   readerMeaningId: null,
   readerMeaningValue: "",
   readerPresentationLayerIndex: 0,
-  readerInitialPresentation: localStorage.getItem("reader_initial_presentation") || "rashi",
+  readerF3Mode: localStorage.getItem("reader_f3_mode") || "modern",
   readerMode: localStorage.getItem("reader_mode") || "default",
   torahBook: "Bereshit",
   torahChapter: 1,
@@ -418,6 +425,8 @@ const el = {
   wordDetailsWord: document.getElementById("word-details-word"),
   wordDetailsStatus: document.getElementById("word-details-status"),
   wordDetailsState: document.getElementById("word-details-state"),
+  mnemonicReveal: document.getElementById("mnemonic-reveal"),
+  wordDetailsRevealCount: document.getElementById("word-details-reveal-count"),
   mnemonicForm: document.getElementById("mnemonic-form"),
   wordMnemonic: document.getElementById("word-mnemonic"),
   wordMnemonicDisplay: document.getElementById("word-mnemonic-display"),
@@ -444,6 +453,7 @@ const el = {
   srsState: document.getElementById("srs-state"),
   srsReviewer: document.getElementById("srs-reviewer"),
   srsFrontWord: document.getElementById("srs-front-word"),
+  srsUndoBtn: document.getElementById("srs-undo-btn"),
   srsDeleteCard: document.getElementById("srs-delete-card"),
   srsReveal: document.getElementById("srs-reveal"),
   srsDefinitions: document.getElementById("srs-definitions"),
@@ -587,6 +597,9 @@ function renderSpotlightBar() {
 function clearWordDetailsPanel() {
   state.selectedWord = "";
   state.readerMnemonicValue = "";
+  state.readerMnemonicRevealCount = 0;
+  state.readerDetailsRevealed = false;
+  state.readerDetailsLoading = false;
   state.readerMeaningId = null;
   state.readerMeaningValue = "";
   el.wordDetailsPanel.classList.add("is-hidden");
@@ -597,6 +610,10 @@ function clearWordDetailsPanel() {
   setStateMessage(el.mnemonicState, "");
   setStateMessage(el.meaningsState, "");
   el.wordMnemonic.value = "";
+  el.mnemonicReveal.textContent = "";
+  el.mnemonicReveal.classList.add("is-hidden");
+  el.wordDetailsRevealCount.textContent = "";
+  el.wordDetailsPanel.classList.remove("is-mnemonic-preview");
   el.manualMeaning.value = "";
   el.meaningContext.value = "";
   renderInlineEditDisplays();
@@ -1390,6 +1407,7 @@ function renderSrs() {
   const isTrulyAllCaughtUp = isReviewingDone && available === 0;
 
   el.srsReviewer.classList.toggle("is-hidden", !hasActiveCard);
+  if (el.srsUndoBtn) el.srsUndoBtn.disabled = state.srsUndoHistory.length === 0;
   el.srsAddNew.classList.toggle("is-hidden", !canAddNewCards);
   el.srsCaughtUp.classList.toggle("is-hidden", !isTrulyAllCaughtUp);
   el.srsMeta.hidden = !hasActiveCard;
@@ -1671,6 +1689,10 @@ async function confirmPostpone() {
   }
 }
 
+
+if (el.srsUndoBtn) {
+  el.srsUndoBtn.addEventListener("click", () => void undoSrsReview());
+}
 
 if (el.srsDeleteCard) {
   el.srsDeleteCard.addEventListener("click", () => void deleteCurrentSrsCard());
@@ -2285,6 +2307,16 @@ function renderWordDetailsPanel() {
   el.wordDetailsStatus.textContent = stateLabel(wordState);
   el.wordDetailsPanel.classList.toggle("status-unknown", wordState === "unknown");
   el.wordDetailsPanel.classList.toggle("status-known", wordState === "known");
+  const hasMnemonic = Boolean(state.readerMnemonicValue.trim());
+  el.wordDetailsPanel.classList.toggle("is-loading", state.readerDetailsLoading);
+  const isMnemonicPreview = hasMnemonic && !state.readerDetailsRevealed;
+  el.wordDetailsPanel.classList.toggle("is-mnemonic-preview", isMnemonicPreview);
+  el.mnemonicReveal.classList.toggle("is-hidden", !isMnemonicPreview);
+  el.mnemonicReveal.textContent = hasMnemonic ? state.readerMnemonicValue : "";
+  const count = state.readerMnemonicRevealCount;
+  el.wordDetailsRevealCount.textContent = hasMnemonic && state.readerDetailsRevealed
+    ? `Full details revealed ${count} ${count === 1 ? "time" : "times"}`
+    : "";
 }
 
 
@@ -2322,18 +2354,31 @@ function cycleReaderPresentationLayer() {
   state.readerPresentationLayerIndex = (state.readerPresentationLayerIndex + 1) % readerPresentationLayersForCurrentPage().length;
 }
 
-function toggleReaderInitialPresentation() {
-  state.readerInitialPresentation = state.readerInitialPresentation === "rashi" ? "handwritten" : "rashi";
-  localStorage.setItem("reader_initial_presentation", state.readerInitialPresentation);
+function cycleReaderF3Mode() {
+  const modes = ["modern", "rashi", "cursive"];
+  const next = modes[(modes.indexOf(state.readerF3Mode) + 1) % modes.length];
+  state.readerF3Mode = next;
+  localStorage.setItem("reader_f3_mode", next);
   state.readerPresentationLayerIndex = 0;
 }
 
 function readerPresentationLayersForCurrentPage() {
-  const firstLayer = state.readerInitialPresentation === "handwritten"
-    ? READER_HANDWRITTEN_PRESENTATION_LAYER
-    : READER_RASHI_PRESENTATION_LAYER;
+  if (state.readerF3Mode === "rashi") {
+    return [
+      READER_RASHI_PRESENTATION_LAYER,
+      READER_BLOCK_NO_NIKKUD_PRESENTATION_LAYER,
+      READER_BLOCK_NIKKUD_PRESENTATION_LAYER,
+    ];
+  }
+  if (state.readerF3Mode === "cursive") {
+    return [
+      READER_HANDWRITTEN_PRESENTATION_LAYER,
+      READER_BLOCK_NO_NIKKUD_PRESENTATION_LAYER,
+      READER_BLOCK_NIKKUD_PRESENTATION_LAYER,
+    ];
+  }
+  // default "modern"
   return [
-    firstLayer,
     READER_BLOCK_NO_NIKKUD_PRESENTATION_LAYER,
     READER_BLOCK_NIKKUD_PRESENTATION_LAYER,
   ];
@@ -2370,7 +2415,7 @@ function renderSentence(data = state.currentSentence) {
   state.currentSentence = data;
   updateReaderPresentationClass();
   const layer = currentReaderPresentationLayer();
-  el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index} | Layer: ${layer.label} (F3 cycle, F4 Rashi/handwriting)`;
+  el.readerMeta.textContent = `Text ${data.text_id} - sentence ${data.sentence_index} | Layer: ${layer.label} (F3 cycle, F4 script mode: ${state.readerF3Mode})`;
   el.prevSentence.disabled = data.prev_sentence_index === null;
   el.nextSentence.disabled = data.next_sentence_index === null;
   el.prevSentence.dataset.target = data.prev_sentence_index;
@@ -2732,6 +2777,9 @@ function renderMeanings(data) {
 
 function renderWordDetails(data) {
   state.readerMnemonicValue = data?.mnemonic || "";
+  state.readerMnemonicRevealCount = data?.mnemonic_reveal_count || 0;
+  state.readerDetailsLoading = false;
+  renderWordDetailsPanel();
   renderSpotlightBar();
   if (state.currentView === "torah") renderTorahWordPanel(state.selectedWord);
   if (el.wordMnemonic.classList.contains("is-hidden")) {
@@ -3063,6 +3111,10 @@ async function loadWordDetailsForWord(word) {
       return;
     }
     renderWordDetails(data);
+    if (!(data?.mnemonic || "").trim()) {
+      void loadMeaningsForWord(word);
+      void loadDictionaryForWord(word, document.getElementById("word-dict-results"));
+    }
   } catch (err) {
     if (!isCurrentRequest("wordDetails", requestVersion) || word !== state.selectedWord) {
       return;
@@ -3096,12 +3148,29 @@ async function loadMeaningsForWord(word) {
 
 function setSelectedWord(word) {
   state.selectedWord = word;
+  state.readerDetailsRevealed = false;
+  state.readerDetailsLoading = true;
+  state.readerMnemonicValue = "";
+  state.readerMnemonicRevealCount = 0;
   setStateMessage(el.wordDetailsState, "");
   setStateMessage(el.mnemonicState, "");
   renderSentence();
   void loadWordDetailsForWord(word);
-  void loadMeaningsForWord(word);
-  void loadDictionaryForWord(word, document.getElementById("word-dict-results"));
+}
+
+async function revealWordDetails() {
+  const word = state.selectedWord;
+  if (!word || !state.readerMnemonicValue.trim() || state.readerDetailsRevealed) return;
+  try {
+    const data = await state.api.revealWordDetails(state.activeUserId, word, state.currentLanguage);
+    if (state.selectedWord !== word) return;
+    state.readerDetailsRevealed = true;
+    renderWordDetails(data);
+    void loadMeaningsForWord(word);
+    void loadDictionaryForWord(word, document.getElementById("word-dict-results"));
+  } catch (err) {
+    if (state.selectedWord === word) setStateMessage(el.wordDetailsState, `Reveal failed: ${String(err.message || err)}`, true);
+  }
 }
 
 async function updateMeaning(meaningId, editorNode, saveButton) {
@@ -3517,6 +3586,7 @@ if (el.btnGrammar) {
 }
 
 el.wordMnemonicDisplay.onclick = () => startInlineEdit("mnemonic");
+el.mnemonicReveal.onclick = () => { void revealWordDetails(); };
 el.manualMeaningDisplay.onclick = () => startInlineEdit("meaning");
 
 el.wordMnemonic.onblur = () => {
@@ -3768,7 +3838,7 @@ window.addEventListener("keydown", (event) => {
   }
   if (state.currentView === "reader" && event.key === "F4") {
     event.preventDefault();
-    toggleReaderInitialPresentation();
+    cycleReaderF3Mode();
     renderSentence();
     return;
   }

@@ -76,6 +76,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             language TEXT NOT NULL DEFAULT 'hebrew',
             normalized_word TEXT NOT NULL,
             mnemonic TEXT,
+            mnemonic_reveal_count INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE,
@@ -213,6 +214,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     srs_cols = {row[1] for row in conn.execute("PRAGMA table_info(srs_cards)")}
     if "deleted_at" not in srs_cols:
         conn.execute("ALTER TABLE srs_cards ADD COLUMN deleted_at TEXT")
+        conn.commit()
+
+    word_detail_cols = {row[1] for row in conn.execute("PRAGMA table_info(word_details)")}
+    if "mnemonic_reveal_count" not in word_detail_cols:
+        conn.execute("ALTER TABLE word_details ADD COLUMN mnemonic_reveal_count INTEGER NOT NULL DEFAULT 0")
         conn.commit()
 
 

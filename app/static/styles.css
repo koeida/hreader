@@ -1479,6 +1479,40 @@ textarea:focus-visible {
   display: none;
 }
 
+.word-details-panel.is-mnemonic-preview .word-details-full,
+.word-details-panel.is-loading .word-details-full {
+  display: none;
+}
+
+.mnemonic-reveal {
+  width: 100%;
+  min-height: 64px;
+  border: 1px solid color-mix(in srgb, var(--border-accent-subtle) 72%, var(--border) 28%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 82%, var(--accent-soft) 18%);
+  color: var(--text-primary);
+  padding: 0.72rem 0.84rem;
+  text-align: start;
+  white-space: pre-wrap;
+  cursor: pointer;
+}
+
+.mnemonic-reveal:hover,
+.mnemonic-reveal:focus-visible {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring-soft) 66%, transparent);
+}
+
+.mnemonic-reveal.is-hidden {
+  display: none;
+}
+
+.word-details-reveal-count {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .word-details-panel:has(.inline-edit-input:not(.is-hidden)) {
   border-color: color-mix(in srgb, var(--focus-ring) 58%, var(--border) 42%);
   box-shadow:
@@ -2218,6 +2252,36 @@ textarea:focus-visible {
   line-height: 1.1;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.srs-undo-btn {
+  position: absolute;
+  top: -2.25rem;
+  left: 2rem;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  transition:
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.srs-undo-btn:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  background: var(--surface-raised);
+  transform: none;
+  filter: none;
+}
+
+.srs-undo-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .srs-delete-card {

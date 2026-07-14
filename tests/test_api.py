@@ -505,6 +505,7 @@ def test_word_details_mnemonic_and_manual_meaning_edit(tmp_path: Path) -> None:
         details_before = client.get(f"/v1/users/{user_id}/words/שלום/details")
         assert details_before.status_code == 200
         assert details_before.json()["mnemonic"] is None
+        assert details_before.json()["mnemonic_reveal_count"] == 0
 
         saved_details = client.put(
             f"/v1/users/{user_id}/words/שלום/details",
@@ -512,6 +513,9 @@ def test_word_details_mnemonic_and_manual_meaning_edit(tmp_path: Path) -> None:
         )
         assert saved_details.status_code == 200
         assert saved_details.json()["mnemonic"] == "Say shalom like saying hello"
+        reveal = client.post(f"/v1/users/{user_id}/words/שלום/details/reveal")
+        assert reveal.status_code == 200
+        assert reveal.json()["mnemonic_reveal_count"] == 1
 
         created = client.post(
             f"/v1/users/{user_id}/words/שלום/meanings",

@@ -52,6 +52,8 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert 'id="mnemonic-form"' in html.text
     assert 'id="word-mnemonic"' in html.text
     assert 'id="word-mnemonic-display"' in html.text
+    assert 'id="mnemonic-reveal"' in html.text
+    assert 'id="word-details-reveal-count"' in html.text
     assert 'id="add-meaning-form"' in html.text
     assert 'id="manual-meaning-display"' in html.text
     assert 'id="meanings-preview"' in html.text
@@ -76,6 +78,7 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert "cycleState" in js.text
     assert "clearWordDetailsPanel" in js.text
     assert "saveInlineMnemonic" in js.text
+    assert "revealWordDetails" in js.text
     assert "saveInlineMeaning" in js.text
     assert "loadSrsSession" in js.text
     assert "submitSrsResult" in js.text
@@ -87,7 +90,7 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert "state.selectedWord !== word" in js.text
     assert "renderSentence();" in js.text
     assert "READER_RASHI_PRESENTATION_LAYER" in js.text
-    assert "toggleReaderInitialPresentation" in js.text
+    assert "cycleReaderF3Mode" in js.text
     assert 'event.key === "F4"' in js.text
     assert "animateSelectionPulse" in js.text
     assert "getStreak" in js.text
