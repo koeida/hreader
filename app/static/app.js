@@ -2314,7 +2314,7 @@ function renderWordDetailsPanel() {
   el.mnemonicReveal.classList.toggle("is-hidden", !isMnemonicPreview);
   el.mnemonicReveal.textContent = hasMnemonic ? state.readerMnemonicValue : "";
   const count = state.readerMnemonicRevealCount;
-  el.wordDetailsRevealCount.textContent = hasMnemonic && state.readerDetailsRevealed
+  el.wordDetailsRevealCount.textContent = hasMnemonic
     ? `Full details revealed ${count} ${count === 1 ? "time" : "times"}`
     : "";
 }

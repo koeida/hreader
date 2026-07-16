@@ -79,6 +79,8 @@ def test_frontend_uses_inline_word_details_panel(tmp_path: Path) -> None:
     assert "clearWordDetailsPanel" in js.text
     assert "saveInlineMnemonic" in js.text
     assert "revealWordDetails" in js.text
+    assert "el.wordDetailsRevealCount.textContent = hasMnemonic" in js.text
+    assert "hasMnemonic && state.readerDetailsRevealed" not in js.text
     assert "saveInlineMeaning" in js.text
     assert "loadSrsSession" in js.text
     assert "submitSrsResult" in js.text
